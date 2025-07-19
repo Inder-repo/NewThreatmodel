@@ -3,13 +3,13 @@ import base64
 import re
 from graphviz import Digraph, ExecutableNotFound
 from PIL import Image, ImageDraw, ImageFont
-from datetime import datetime
+import io
 
 # Streamlit app configuration
 st.set_page_config(page_title="Threat Modeling 101", page_icon="🔒", layout="wide")
 
-# Current date and time (05:31 PM AEST, Saturday, July 19, 2025)
-current_datetime = "05:31 PM AEST, Saturday, July 19, 2025"
+# Current date and time (05:45 PM AEST, Saturday, July 19, 2025)
+current_datetime = "05:45 PM AEST, Saturday, July 19, 2025"
 
 # Initialize session state
 if 'step' not in st.session_state:
@@ -77,7 +77,7 @@ def annotate_image(image_data, threats):
     """Annotate the uploaded image with data flows, trust boundaries, threat IDs, and date/time."""
     try:
         # Convert base64 to image
-        image = Image.open(base64.b64decode(image_data))
+        image = Image.open(io.BytesIO(base64.b64decode(image_data)))
         draw = ImageDraw.Draw(image)
         font = ImageFont.load_default()  # Use default font; for better fonts, install a TTF file and use ImageFont.truetype
 
@@ -95,7 +95,7 @@ def annotate_image(image_data, threats):
             else:
                 node_threats.setdefault(dfd_element, []).append(f"{threat_id}: {threat['type']}")
 
-        # Placeholder positions for annotations (simplified; adjust based on actual image layout)
+        # Annotate with data flows and trust boundaries
         y_offset = 30
         x_start = 10
         for flow in st.session_state.data_flows:
