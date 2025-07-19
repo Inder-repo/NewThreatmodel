@@ -1,6 +1,5 @@
 import streamlit as st
 import base64
-import json
 import re
 from graphviz import Digraph, ExecutableNotFound
 
@@ -37,17 +36,17 @@ if 'generated_diagram' not in st.session_state:
     st.session_state.generated_diagram = None
 
 # Title and introduction
-st.title("Threat Modeling 101: Learn with an E-commerce Example")
+st.title("Threat Modeling 101: E-commerce Example with Enhanced DFD")
 st.markdown("""
-Welcome to *Threat Modeling 101*! This app teaches you how to identify and mitigate security threats using the **STRIDE** framework, focusing on **Data Flow** and **Trust Boundaries**. Threats are assigned numeric IDs (e.g., T1, T2) and labeled against the Data Flow Diagram (DFD) to show where they apply.
+Welcome to *Threat Modeling 101*! This app teaches you how to identify and mitigate security threats using the **STRIDE** framework, focusing on **Data Flow** and **Trust Boundaries**. Threats are assigned numeric IDs (e.g., T1, T2) and mapped to a refined Data Flow Diagram (DFD) with improved visuals.
 """)
 
 # Section: Key Concepts
 st.header("Key Concepts")
 st.subheader("STRIDE Framework")
 st.markdown("""
-**STRIDE** (developed by Microsoft) categorizes threats:
-- **Spoofing**: Impersonating a user or system (e.g., stealing credentials).
+**STRIDE** categorizes threats:
+- **Spoofing**: Impersonating a user/system (e.g., stealing credentials).
 - **Tampering**: Modifying data/code (e.g., altering prices).
 - **Repudiation**: Avoiding accountability (e.g., disabling logs).
 - **Information Disclosure**: Exposing sensitive data (e.g., leaking PII).
@@ -56,22 +55,32 @@ st.markdown("""
 """)
 st.subheader("Data Flow")
 st.markdown("""
-**Data Flow** shows how data moves between system components (e.g., from browser to server). Mapping data flows helps identify where threats occur.
+**Data Flow** shows how data moves between components (e.g., browser to server). Mapping flows identifies threat locations.
 """)
 st.subheader("Trust Boundaries")
 st.markdown("""
-**Trust Boundaries** separate components with different trust levels (e.g., untrusted client vs. trusted server). Threats are often critical at these boundaries.
+**Trust Boundaries** separate components with different trust levels (e.g., untrusted client vs. trusted server). Threats often occur at these boundaries.
 """)
 st.subheader("Threat Labeling with IDs")
 st.markdown("""
-Each threat is assigned a unique ID (e.g., T1, T2) and mapped to DFD elements (components, data flows, trust boundaries). In the DFD, threat IDs are displayed for easy reference to STRIDE threats.
+Each threat is assigned a unique ID (e.g., T1, T2) and mapped to DFD elements (components, data flows, trust boundaries) with clear visuals.
 """)
 
 def generate_diagram(threats):
-    """Generate a DFD with numbered threat IDs using Graphviz."""
+    """Generate a refined DFD with numbered threat IDs using Graphviz."""
     try:
         dot = Digraph(comment="Data Flow Diagram", format="png")
-        dot.attr(rankdir="LR", size="8,5")
+        dot.attr(rankdir="TB", size="10,8", fontname="Arial", bgcolor="white", splines="polyline")
+        dot.attr("node", fontname="Arial", fontsize="12")
+        dot.attr("edge", fontname="Arial", fontsize="10")
+
+        # Define node styles based on component type
+        node_styles = {
+            "Frontend": {"shape": "oval", "style": "filled", "fillcolor": "lightcoral", "color": "red"},
+            "Backend": {"shape": "box", "style": "filled", "fillcolor": "lightblue", "color": "blue"},
+            "Database": {"shape": "cylinder", "style": "filled", "fillcolor": "lightblue", "color": "blue"},
+            "Payment Gateway": {"shape": "oval", "style": "filled", "fillcolor": "lightgreen", "color": "green"}
+        }
 
         # Add nodes for data flow sources and destinations
         nodes = set()
@@ -90,23 +99,25 @@ def generate_diagram(threats):
             else:
                 node_threats.setdefault(dfd_element, []).append(f"{threat_id}: {threat['type']}")
 
-        # Add nodes with threat IDs
+        # Add nodes with refined styles and threat IDs
         for node in nodes:
             threat_label = node_threats.get(node, [])
             label = f"{node}\nThreats: {', '.join(threat_label) if threat_label else 'None'}"
-            dot.node(node, label, shape="box", color="red" if threat_label else "black")
+            style = node_styles.get(node, {"shape": "box", "style": "filled", "fillcolor": "white", "color": "black"})
+            dot.node(node, label, **style, penwidth="2" if threat_label else "1")
 
         # Add data flow edges with threat IDs
         for flow in st.session_state.data_flows:
             edge_key = f"{flow['source']} → {flow['destination']}"
             threat_label = edge_threats.get(edge_key, [])
             label = f"{flow['dataType']}\nThreats: {', '.join(threat_label) if threat_label else 'None'}"
-            dot.edge(flow["source"], flow["destination"], label=label, color="red" if threat_label else "black")
+            dot.edge(flow["source"], flow["destination"], label=label, color="red" if threat_label else "black", penwidth="2" if threat_label else "1")
 
         # Add trust boundaries as subgraphs
         for boundary in st.session_state.trust_boundaries:
             with dot.subgraph(name=f"cluster_{boundary['name']}") as c:
-                c.attr(label=f"{boundary['name']}\nThreats: {', '.join(node_threats.get(boundary['name'], []) or ['None'])}", style="dashed")
+                c.attr(label=f"{boundary['name']}\nThreats: {', '.join(node_threats.get(boundary['name'], []) or ['None'])}", 
+                       style="dashed", color="purple", fontname="Arial", fontsize="12", penwidth="2")
                 components = re.findall(r"\b\w+\b", boundary["description"].lower())
                 for node in nodes:
                     if node.lower() in components or node.lower() in boundary["name"].lower():
@@ -125,39 +136,53 @@ def generate_diagram(threats):
         return None
 
 def fallback_ascii_diagram(threats):
-    """Generate a fallback ASCII diagram with numbered threat IDs."""
+    """Generate a refined ASCII diagram with numbered threat IDs and a legend table."""
     # Map threats to DFD elements
     edge_threats = {}
     node_threats = {}
+    threat_details = {}
     for threat in threats:
         dfd_element = threat.get("dfd_element", "")
         threat_id = threat.get("id", "")
+        threat_details[threat_id] = f"{threat['type']}: {threat['description']}"
         if "→" in dfd_element:
             edge_threats.setdefault(dfd_element, []).append(f"{threat_id}: {threat['type']}")
         else:
             node_threats.setdefault(dfd_element, []).append(f"{threat_id}: {threat['type']}")
 
+    # Compact ASCII diagram
     diagram = """
-+----------------+       +----------------+       +----------------+
-|    Frontend    | <---> |    Backend     | <---> |    Database    |
-|   (React App)  |       |   (Node.js)    |       |    (MySQL)     |
-|   [Untrusted]  |       |   [Trusted]    |       |   [Trusted]    |
-| Threats: {frontend_threats} | Threats: {backend_threats} | Threats: {database_threats} |
-+----------------+       +----------------+       +----------------+
-       ||                        |
-       ||                        v
-       ||                 +----------------+
-       ||                 | Payment Gateway |
-       ||                 |   (Stripe)     |
-       ||                 | [External Trust]|
-       ||                 | Threats: {payment_threats} |
-       ||                 +----------------+
-       ========= Trust Boundary =========
-       Data Flow Threats:
-       Frontend → Backend: {frontend_backend_threats}
-       Backend → Database: {backend_database_threats}
-       Backend → Payment Gateway: {backend_payment_threats}
+    +----------------+         +----------------+         +----------------+
+    |    Frontend    |<------->|    Backend     |<------->|    Database    |
+    |   (React App)  |         |   (Node.js)    |         |    (MySQL)     |
+    |   [Untrusted]  |         |   [Trusted]    |         |   [Trusted]    |
+    | Threats: {frontend_threats} | Threats: {backend_threats} | Threats: {database_threats} |
+    +----------------+         +----------------+         +----------------+
+            |                          |
+            |                          v
+            |                   +----------------+
+            |                   | Payment Gateway |
+            |                   |   (Stripe)     |
+            |                   | [External Trust]|
+            |                   | Threats: {payment_threats} |
+            |                   +----------------+
+    ---- Trust Boundary ----
+
+    Data Flow Threats:
+      Frontend → Backend: {frontend_backend_threats}
+      Backend → Database: {backend_database_threats}
+      Backend → Payment Gateway: {backend_payment_threats}
     """
+
+    # Generate threat legend table
+    legend = "\nThreat Legend:\n"
+    legend += "+-------+--------------------------+\n"
+    legend += "| ID    | Threat Description       |\n"
+    legend += "+-------+--------------------------+\n"
+    for threat_id, description in sorted(threat_details.items()):
+        legend += f"| {threat_id:<5} | {description:<24} |\n"
+    legend += "+-------+--------------------------+\n"
+
     return diagram.format(
         frontend_threats=", ".join(node_threats.get("Frontend", ["None"])),
         backend_threats=", ".join(node_threats.get("Backend", ["None"])),
@@ -166,7 +191,7 @@ def fallback_ascii_diagram(threats):
         frontend_backend_threats=", ".join(edge_threats.get("Frontend → Backend", ["None"])),
         backend_database_threats=", ".join(edge_threats.get("Backend → Database", ["None"])),
         backend_payment_threats=", ".join(edge_threats.get("Backend → Payment Gateway", ["None"]))
-    )
+    ) + legend
 
 def analyze_threats():
     """Perform STRIDE-based threat analysis with numbered threat IDs."""
@@ -418,13 +443,12 @@ def step_2():
 
     if st.session_state.data_flows or st.session_state.trust_boundaries:
         st.subheader("Preview Data Flow Diagram")
-        # Generate threats for diagram preview
         preview_threats = analyze_threats().get("threats", [])
         diagram = generate_diagram(preview_threats)
         if diagram:
-            st.image(f"data:image/png;base64,{diagram}", caption="Generated Data Flow Diagram with Numbered Threat IDs")
+            st.image(f"data:image/png;base64,{diagram}", caption="Refined Data Flow Diagram with Numbered Threat IDs", width=800)
         else:
-            st.markdown("**Fallback ASCII Diagram with Numbered Threat IDs**:")
+            st.markdown("**Refined ASCII Diagram with Numbered Threat IDs**:")
             st.code(fallback_ascii_diagram(preview_threats), language="text")
             if st.session_state.error:
                 st.error(st.session_state.error)
@@ -443,7 +467,6 @@ def step_3():
     st.markdown("Below are the identified threats, labeled with numeric IDs (e.g., T1, T2) and mapped to Data Flow Diagram (DFD) elements. Refer to the DFD for threat locations.")
     if st.session_state.threat_model:
         st.subheader("Identified Threats")
-        # Group threats by DFD element
         dfd_elements = {}
         for threat in st.session_state.threat_model["threats"]:
             dfd_element = threat["dfd_element"]
@@ -462,10 +485,10 @@ def step_3():
                     st.markdown(f"- **DFD Element**: {threat['dfd_element']}")
 
     if st.session_state.generated_diagram:
-        st.subheader("Generated Data Flow Diagram with Numbered Threat IDs")
-        st.image(f"data:image/png;base64,{st.session_state.generated_diagram}", caption="Data Flow Diagram with Numbered Threat IDs")
+        st.subheader("Refined Data Flow Diagram with Numbered Threat IDs")
+        st.image(f"data:image/png;base64,{st.session_state.generated_diagram}", caption="Refined Data Flow Diagram with Numbered Threat IDs", width=800)
     else:
-        st.markdown("**Fallback ASCII Diagram with Numbered Threat IDs**:")
+        st.markdown("**Refined ASCII Diagram with Numbered Threat IDs**:")
         st.code(fallback_ascii_diagram(st.session_state.threat_model.get("threats", [])), language="text")
     if st.button("Start Over"):
         st.session_state.step = 1
@@ -494,13 +517,13 @@ def step_3():
 # Section: Tips for Threat Modeling
 st.header("Tips for Effective Threat Modeling")
 st.markdown("""
-1. **Map Data Flows**: Diagram how data moves to identify vulnerabilities.
-2. **Define Trust Boundaries**: Mark where trust levels change (e.g., client to server).
-3. **Apply STRIDE**: Analyze each component and data flow systematically.
-4. **Use Numbered Threat IDs**: Assign IDs (e.g., T1, T2) to map threats to DFD elements.
-5. **Involve the Team**: Get perspectives from developers, designers, and stakeholders.
-6. **Iterate**: Update the threat model when the system changes.
-7. **Document**: Record threats, mitigations, and DFD mappings for reference.
+1. **Map Data Flows**: Diagram data movement to identify vulnerabilities.
+2. **Define Trust Boundaries**: Mark trust level changes (e.g., client to server).
+3. **Apply STRIDE**: Analyze components and flows systematically.
+4. **Use Numbered Threat IDs**: Map threats to DFD elements with IDs (e.g., T1, T2).
+5. **Involve the Team**: Include developers, designers, and stakeholders.
+6. **Iterate**: Update the threat model as the system evolves.
+7. **Document**: Record threats, mitigations, and DFD mappings.
 """)
 
 # Render the current step
