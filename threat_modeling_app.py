@@ -8,8 +8,8 @@ import io
 # Streamlit app configuration
 st.set_page_config(page_title="Threat Modeling 101", page_icon="🔒", layout="wide")
 
-# Current date and time (05:47 PM AEST, Saturday, July 19, 2025)
-current_datetime = "05:47 PM AEST, Saturday, July 19, 2025"
+# Current date and time (05:45 PM AEST, Saturday, July 19, 2025)
+current_datetime = "05:45 PM AEST, Saturday, July 19, 2025"
 
 # Initialize session state
 if 'step' not in st.session_state:
@@ -48,93 +48,26 @@ st.markdown(f"""
 Welcome to *Threat Modeling 101*! This app teaches you how to identify and mitigate security threats using the **STRIDE** framework, focusing on **Data Flow** and **Trust Boundaries**. Threats are assigned numeric IDs (e.g., T1, T2) and mapped to a Data Flow Diagram (DFD) with improved visuals. Generated on: {current_datetime}.
 """)
 
-# Section: What is Threat Modeling?
-st.header("What is Threat Modeling?")
-st.markdown("""
-**Proactive Security**  
-Identify threats before they become vulnerabilities.
-
-**Risk Assessment**  
-Evaluate potential impact and likelihood of threats.
-
-**Design Integration**  
-Build security into the system architecture.
-
-**Stakeholder Communication**  
-Bridge gap between security and business teams.
-
-**Key Questions Answered:**  
-• What are we building?  
-• What can go wrong?  
-• What should we do about it?  
-• Did we do a good job?
-
-**STRIDE Methodology**  
-Six categories of security threats:  
-- **S - Spoofing**: Impersonating users, processes, or systems to gain unauthorized access.  
-- **T - Tampering**: Unauthorized modification of data, code, or system configurations.  
-- **R - Repudiation**: Denial of actions performed, lack of non-repudiation mechanisms.  
-- **I - Information Disclosure**: Unauthorized access to confidential or sensitive information.  
-- **D - Denial of Service**: Making systems or services unavailable to legitimate users.  
-- **E - Elevation of Privilege**: Gaining higher access rights than originally authorized.
-
-**Data Flow Diagrams (DFD)**  
-Visual representation of how data moves through a system:  
-- **User/Actor** → **Web Application** → **Database**  
-- **Authentication Service** ↕ **User Credentials**  
-- **External Attacker** ⚠ **Network Boundary**  
-- **External Entities**: Users, systems, or services outside your control.  
-- **Processes**: Applications, services, or functions that transform data.  
-- **Data Stores**: Databases, files, or repositories where data is stored.  
-- **Data Flows**: Movement of information between components.  
-- **Trust Boundaries**: Lines where security controls change or trust levels differ (e.g., Internet Boundary, DMZ Boundary, Internal Network).
-
-**Example Trust Boundaries:**  
-• Network perimeters (firewalls)  
-• Process boundaries  
-• User privilege levels  
-• Administrative domains  
-• Cloud service boundaries
-
-**Original Conceptual Model**  
-📊 Data 💎 Value ⚠️ Risk 🏗️ System 🎯 Threat ⚙️ Functionality 🔓 Weakness 🛡️ Vulnerability  
-- **Actor** Creates/Informs/Has/Exposes/Generates/Creates/Causes/Contains/Exploits/Breaks/Results in/Exploitable  
-- **Key Relationships**: Systems contain Data that creates business Value. Actors can exploit Threats that target Weaknesses in system Functionality, ultimately creating Vulnerabilities that generate Risk to organizational assets.
-
-**Enhanced System Model: E-Commerce Application Threat Model**  
-- **Customer** Causes **Social Engineering, SQL Injection, Session Hijacking** Generates **Risk**  
-- **E-Commerce Platform** Has **Customer Data, Payment Info, Order History** Creates **Business Value** Informs **Security Controls (Authentication, Encryption, Logging)** Creates **Weakness (Config errors, Missing patches)** Exploits **Vulnerability (Data breach, Service outage)**  
-- **↕ Exposes ↕ | ↕ Contains ↕ | ↕ Results in ↕**  
-- **Example Threats Identified:**  
-  - Spoofing: Fake login pages to steal credentials  
-  - Tampering: Modification of product prices in requests  
-  - Information Disclosure: Exposure of customer payment data  
-  - Denial of Service: Cart bombing to overwhelm the system
-
-**Threat Modeling Process**  
-1. Define Scope: Identify system boundaries, assets, and stakeholders  
-2. Create DFD: Map data flows, processes, and trust boundaries  
-3. Apply STRIDE: Systematically identify threats for each component  
-4. Assess Risk: Evaluate impact and likelihood of each threat  
-5. Mitigate: Design and implement appropriate security controls  
-6. Validate: Review effectiveness and update as needed  
-
-**Best Practices:**  
-• Start early in design phase  
-• Include diverse stakeholders  
-• Keep models updated  
-• Focus on high-value assets  
-• Document assumptions and decisions
-
-**Key Takeaways**  
-- **STRIDE**: Comprehensive framework for categorizing and identifying security threats systematically.  
-- **Data Flow Diagrams**: Visual tools that help understand system architecture and data movement patterns.  
-- **Trust Boundaries**: Critical points where security controls change and threats are most likely to occur.  
-- **Remember**: Threat modeling is not a one-time activity but an ongoing process that should evolve with your system. Start simple, iterate often, and always consider the attacker's perspective.
-""")
-
 # Section: Key Concepts
 st.header("Key Concepts")
+st.subheader("STRIDE Framework")
+st.markdown("""
+**STRIDE** categorizes threats:
+- **Spoofing**: Impersonating a user/system (e.g., stealing credentials).
+- **Tampering**: Modifying data/code (e.g., altering prices).
+- **Repudiation**: Avoiding accountability (e.g., disabling logs).
+- **Information Disclosure**: Exposing sensitive data (e.g., leaking PII).
+- **Denial of Service**: Disrupting availability (e.g., flooding a server).
+- **Elevation of Privilege**: Gaining unauthorized access (e.g., becoming admin).
+""")
+st.subheader("Data Flow")
+st.markdown("""
+**Data Flow** shows how data moves between components (e.g., browser to server). Mapping flows identifies threat locations.
+""")
+st.subheader("Trust Boundaries")
+st.markdown("""
+**Trust Boundaries** separate components with different trust levels (e.g., untrusted client vs. trusted server). Threats often occur at these boundaries.
+""")
 st.subheader("Threat Labeling with IDs")
 st.markdown("""
 Each threat is assigned a unique ID (e.g., T1, T2) and mapped to DFD elements (components, data flows, trust boundaries) with clear visuals.
@@ -143,9 +76,10 @@ Each threat is assigned a unique ID (e.g., T1, T2) and mapped to DFD elements (c
 def annotate_image(image_data, threats):
     """Annotate the uploaded image with data flows, trust boundaries, threat IDs, and date/time."""
     try:
+        # Convert base64 to image
         image = Image.open(io.BytesIO(base64.b64decode(image_data)))
         draw = ImageDraw.Draw(image)
-        font = ImageFont.load_default()
+        font = ImageFont.load_default()  # Use default font; for better fonts, install a TTF file and use ImageFont.truetype
 
         # Add date/time at the top
         draw.text((10, 10), f"Generated on: {current_datetime}", fill="black", font=font)
@@ -194,6 +128,7 @@ def generate_diagram(threats):
         dot.attr("edge", fontname="Arial", fontsize="10")
         dot.attr(label=f"Data Flow Diagram\nGenerated on: {current_datetime}", labelloc="t", fontname="Arial", fontsize="14")
 
+        # Define node styles based on component type
         node_styles = {
             "Frontend": {"shape": "oval", "style": "filled", "fillcolor": "lightcoral", "color": "red"},
             "Backend": {"shape": "box", "style": "filled", "fillcolor": "lightblue", "color": "blue"},
@@ -201,11 +136,13 @@ def generate_diagram(threats):
             "Payment Gateway": {"shape": "oval", "style": "filled", "fillcolor": "lightgreen", "color": "green"}
         }
 
+        # Add nodes for data flow sources and destinations
         nodes = set()
         for flow in st.session_state.data_flows:
             nodes.add(flow["source"])
             nodes.add(flow["destination"])
         
+        # Map threats to nodes and edges
         node_threats = {}
         edge_threats = {}
         for threat in threats:
@@ -216,18 +153,21 @@ def generate_diagram(threats):
             else:
                 node_threats.setdefault(dfd_element, []).append(f"{threat_id}: {threat['type']}")
 
+        # Add nodes with refined styles and threat IDs
         for node in nodes:
             threat_label = node_threats.get(node, [])
             label = f"{node}\nThreats: {', '.join(threat_label) if threat_label else 'None'}"
             style = node_styles.get(node, {"shape": "box", "style": "filled", "fillcolor": "white", "color": "black"})
             dot.node(node, label, **style, penwidth="2" if threat_label else "1")
 
+        # Add data flow edges with threat IDs
         for flow in st.session_state.data_flows:
             edge_key = f"{flow['source']} → {flow['destination']}"
             threat_label = edge_threats.get(edge_key, [])
             label = f"{flow['dataType']}\nThreats: {', '.join(threat_label) if threat_label else 'None'}"
             dot.edge(flow["source"], flow["destination"], label=label, color="red" if threat_label else "black", penwidth="2" if threat_label else "1")
 
+        # Add trust boundaries as subgraphs
         for boundary in st.session_state.trust_boundaries:
             with dot.subgraph(name=f"cluster_{boundary['name']}") as c:
                 c.attr(label=f"{boundary['name']}\nThreats: {', '.join(node_threats.get(boundary['name'], []) or ['None'])}", 
@@ -237,6 +177,7 @@ def generate_diagram(threats):
                     if node.lower() in components or node.lower() in boundary["name"].lower():
                         c.node(node)
 
+        # Render diagram to file and encode as base64
         diagram_path = dot.render("diagram", format="png", cleanup=True)
         with open(diagram_path, "rb") as f:
             st.session_state.generated_diagram = base64.b64encode(f.read()).decode("utf-8")
@@ -250,6 +191,7 @@ def generate_diagram(threats):
 
 def fallback_ascii_diagram(threats):
     """Generate a refined ASCII diagram with numbered threat IDs, date/time, and legend table."""
+    # Map threats to DFD elements
     edge_threats = {}
     node_threats = {}
     threat_details = {}
@@ -262,6 +204,7 @@ def fallback_ascii_diagram(threats):
         else:
             node_threats.setdefault(dfd_element, []).append(f"{threat_id}: {threat['type']}")
 
+    # Compact ASCII diagram with date/time
     diagram = f"""
     Data Flow Diagram (Generated on: {current_datetime})
     +----------------+         +----------------+         +----------------+
@@ -286,6 +229,7 @@ def fallback_ascii_diagram(threats):
       Backend → Payment Gateway: {backend_payment_threats}
     """
 
+    # Generate threat legend table
     legend = "\nThreat Legend:\n"
     legend += "+-------+--------------------------+\n"
     legend += "| ID    | Threat Description       |\n"
@@ -326,9 +270,10 @@ def analyze_threats():
         threats.append(threat)
         threat_counter += 1
 
+    # Predefined e-commerce threats
     add_threat(
         "Spoofing",
-        "Fake login pages to steal credentials.",
+        "Hackers impersonate users by stealing credentials.",
         "Spoofing",
         "Implement multi-factor authentication and secure session management.",
         "V2.1.1 - Verify strong authentication; V2.7.1 - Verify session management.",
@@ -338,7 +283,7 @@ def analyze_threats():
     )
     add_threat(
         "Tampering",
-        "Modification of product prices in requests.",
+        "Users modify cart data (e.g., price).",
         "Tampering",
         "Validate inputs server-side and use signed tokens for integrity.",
         "V5.1.3 - Verify input validation; V5.3.4 - Verify secure queries.",
@@ -358,7 +303,7 @@ def analyze_threats():
     )
     add_threat(
         "Information Disclosure",
-        "Exposure of customer payment data.",
+        "Sensitive data exposed in transit or storage.",
         "Information Disclosure",
         "Use HTTPS and encrypt sensitive database fields.",
         "V9.1.1 - Verify secure communication; V4.1.3 - Verify access controls.",
@@ -378,7 +323,7 @@ def analyze_threats():
     )
     add_threat(
         "Denial of Service",
-        "Cart bombing to overwhelm the system.",
+        "Flooding disrupts availability.",
         "Denial of Service",
         "Implement rate limiting and use a CDN for traffic spikes.",
         "V1.10.1 - Verify anti-DoS controls; V13.1.1 - Verify API resilience.",
@@ -397,11 +342,13 @@ def analyze_threats():
         controls="Use AWS IAM roles with least privilege."
     )
 
+    # Analyze user-defined data flows
     for flow in st.session_state.data_flows:
         data_type = flow.get('dataType', '').lower()
         source = flow.get('source', '').lower()
         destination = flow.get('destination', '').lower()
         edge_key = f"{flow['source']} → {flow['destination']}"
+
         if 'user' in source or 'client' in source:
             add_threat(
                 "Spoofing",
@@ -435,9 +382,11 @@ def analyze_threats():
                 controls="Use TLS 1.3 and data masking for logs."
             )
 
+    # Analyze trust boundaries
     for boundary in st.session_state.trust_boundaries:
         name = boundary.get('name', '').lower()
         description = boundary.get('description', '').lower()
+
         if 'boundary' in name or 'frontend' in name:
             add_threat(
                 "Spoofing",
