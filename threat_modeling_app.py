@@ -2,13 +2,14 @@ import streamlit as st
 import base64
 import re
 from graphviz import Digraph, ExecutableNotFound
+from PIL import Image, ImageDraw, ImageFont
 from datetime import datetime
 
 # Streamlit app configuration
 st.set_page_config(page_title="Threat Modeling 101", page_icon="🔒", layout="wide")
 
-# Current date and time (05:22 PM AEST, Saturday, July 19, 2025)
-current_datetime = "05:22 PM AEST, Saturday, July 19, 2025"
+# Current date and time (05:31 PM AEST, Saturday, July 19, 2025)
+current_datetime = "05:31 PM AEST, Saturday, July 19, 2025"
 
 # Initialize session state
 if 'step' not in st.session_state:
@@ -38,6 +39,8 @@ if 'error' not in st.session_state:
     st.session_state.error = ""
 if 'generated_diagram' not in st.session_state:
     st.session_state.generated_diagram = None
+if 'uploaded_image' not in st.session_state:
+    st.session_state.uploaded_image = None
 
 # Title and introduction
 st.title("Threat Modeling 101: E-commerce Example with Enhanced DFD")
@@ -69,6 +72,52 @@ st.subheader("Threat Labeling with IDs")
 st.markdown("""
 Each threat is assigned a unique ID (e.g., T1, T2) and mapped to DFD elements (components, data flows, trust boundaries) with clear visuals.
 """)
+
+def annotate_image(image_data, threats):
+    """Annotate the uploaded image with data flows, trust boundaries, threat IDs, and date/time."""
+    try:
+        # Convert base64 to image
+        image = Image.open(base64.b64decode(image_data))
+        draw = ImageDraw.Draw(image)
+        font = ImageFont.load_default()  # Use default font; for better fonts, install a TTF file and use ImageFont.truetype
+
+        # Add date/time at the top
+        draw.text((10, 10), f"Generated on: {current_datetime}", fill="black", font=font)
+
+        # Map threats to elements
+        node_threats = {}
+        edge_threats = {}
+        for threat in threats:
+            dfd_element = threat.get("dfd_element", "")
+            threat_id = threat.get("id", "")
+            if "→" in dfd_element:
+                edge_threats.setdefault(dfd_element, []).append(f"{threat_id}: {threat['type']}")
+            else:
+                node_threats.setdefault(dfd_element, []).append(f"{threat_id}: {threat['type']}")
+
+        # Placeholder positions for annotations (simplified; adjust based on actual image layout)
+        y_offset = 30
+        x_start = 10
+        for flow in st.session_state.data_flows:
+            edge_key = f"{flow['source']} → {flow['destination']}"
+            threat_label = edge_threats.get(edge_key, ["None"])
+            text = f"{flow['source']} → {flow['destination']} ({flow['dataType']}): {', '.join(threat_label)}"
+            draw.text((x_start, y_offset), text, fill="black", font=font)
+            y_offset += 20
+
+        for boundary in st.session_state.trust_boundaries:
+            threat_label = node_threats.get(boundary["name"], ["None"])
+            text = f"{boundary['name']} ({boundary['description']}): {', '.join(threat_label)}"
+            draw.text((x_start, y_offset), text, fill="black", font=font)
+            y_offset += 20
+
+        # Save annotated image to base64
+        buffered = io.BytesIO()
+        image.save(buffered, format="PNG")
+        return base64.b64encode(buffered.getvalue()).decode("utf-8")
+    except Exception as e:
+        st.session_state.error = f"Failed to annotate image: {str(e)}"
+        return image_data
 
 def generate_diagram(threats):
     """Generate a refined DFD with numbered threat IDs and date/time using Graphviz."""
@@ -376,10 +425,10 @@ def step_1():
     )
     uploaded_file = st.file_uploader("Upload a Data Flow Diagram (e.g., PNG, JPG)", type=["png", "jpg", "jpeg"])
     if uploaded_file:
-        st.session_state.diagram = base64.b64encode(uploaded_file.read()).decode("utf-8")
+        st.session_state.uploaded_image = base64.b64encode(uploaded_file.read()).decode("utf-8")
         st.image(uploaded_file, caption="Uploaded Data Flow Diagram")
     if st.button("Next"):
-        if st.session_state.text_input or st.session_state.diagram:
+        if st.session_state.text_input or st.session_state.uploaded_image or st.session_state.diagram:
             st.session_state.step = 2
             st.rerun()
         else:
@@ -450,14 +499,18 @@ def step_2():
     if st.session_state.data_flows or st.session_state.trust_boundaries:
         st.subheader("Preview Data Flow Diagram")
         preview_threats = analyze_threats().get("threats", [])
-        diagram = generate_diagram(preview_threats)
-        if diagram:
-            st.image(f"data:image/png;base64,{diagram}", caption="Data Flow Diagram", width=800)
+        if st.session_state.uploaded_image:
+            st.session_state.generated_diagram = annotate_image(st.session_state.uploaded_image, preview_threats)
+            st.image(f"data:image/png;base64,{st.session_state.generated_diagram}", caption="Data Flow Diagram", width=800)
         else:
-            st.markdown("**Data Flow Diagram (ASCII Fallback)**:")
-            st.code(fallback_ascii_diagram(preview_threats), language="text")
-            if st.session_state.error:
-                st.error(st.session_state.error)
+            diagram = generate_diagram(preview_threats)
+            if diagram:
+                st.image(f"data:image/png;base64,{diagram}", caption="Data Flow Diagram", width=800)
+            else:
+                st.markdown("**Data Flow Diagram (ASCII Fallback)**:")
+                st.code(fallback_ascii_diagram(preview_threats), language="text")
+                if st.session_state.error:
+                    st.error(st.session_state.error)
 
     if st.button("Analyze Threats"):
         if st.session_state.data_flows or st.session_state.trust_boundaries:
@@ -503,6 +556,7 @@ def step_3():
             "E-commerce web app with a React frontend, Node.js backend API, MySQL database, and Stripe payment gateway. "
             "The app is public-facing, handles user authentication, and processes sensitive data like PII and payment details."
         )
+        st.session_state.uploaded_image = None
         st.session_state.diagram = None
         st.session_state.data_flows = [
             {"source": "Frontend", "destination": "Backend", "dataType": "User Input (PII, Credentials)"},
