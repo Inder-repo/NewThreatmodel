@@ -39,7 +39,7 @@ if 'generated_diagram' not in st.session_state:
 # Title and introduction
 st.title("Threat Modeling 101: Learn with an E-commerce Example")
 st.markdown("""
-Welcome to *Threat Modeling 101*! This app teaches you how to identify and mitigate security threats using the **STRIDE** framework, focusing on **Data Flow** and **Trust Boundaries**. Threats are labeled against the Data Flow Diagram (DFD) to show where they apply. Explore the e-commerce web app example or define your own system.
+Welcome to *Threat Modeling 101*! This app teaches you how to identify and mitigate security threats using the **STRIDE** framework, focusing on **Data Flow** and **Trust Boundaries**. Threats are assigned numeric IDs (e.g., T1, T2) and labeled against the Data Flow Diagram (DFD) to show where they apply.
 """)
 
 # Section: Key Concepts
@@ -62,13 +62,13 @@ st.subheader("Trust Boundaries")
 st.markdown("""
 **Trust Boundaries** separate components with different trust levels (e.g., untrusted client vs. trusted server). Threats are often critical at these boundaries.
 """)
-st.subheader("Threat Labeling")
+st.subheader("Threat Labeling with IDs")
 st.markdown("""
-Threats are labeled against DFD elements (components, data flows, trust boundaries) to show where they apply. In the diagram, threats are highlighted with colors or annotations.
+Each threat is assigned a unique ID (e.g., T1, T2) and mapped to DFD elements (components, data flows, trust boundaries). In the DFD, threat IDs are displayed for easy reference to STRIDE threats.
 """)
 
 def generate_diagram(threats):
-    """Generate a DFD with threat labels using Graphviz."""
+    """Generate a DFD with numbered threat IDs using Graphviz."""
     try:
         dot = Digraph(comment="Data Flow Diagram", format="png")
         dot.attr(rankdir="LR", size="8,5")
@@ -84,18 +84,19 @@ def generate_diagram(threats):
         edge_threats = {}
         for threat in threats:
             dfd_element = threat.get("dfd_element", "")
+            threat_id = threat.get("id", "")
             if "→" in dfd_element:
-                edge_threats.setdefault(dfd_element, []).append(threat["type"])
+                edge_threats.setdefault(dfd_element, []).append(f"{threat_id}: {threat['type']}")
             else:
-                node_threats.setdefault(dfd_element, []).append(threat["type"])
+                node_threats.setdefault(dfd_element, []).append(f"{threat_id}: {threat['type']}")
 
-        # Add nodes with threat labels
+        # Add nodes with threat IDs
         for node in nodes:
             threat_label = node_threats.get(node, [])
             label = f"{node}\nThreats: {', '.join(threat_label) if threat_label else 'None'}"
             dot.node(node, label, shape="box", color="red" if threat_label else "black")
 
-        # Add data flow edges with threat labels
+        # Add data flow edges with threat IDs
         for flow in st.session_state.data_flows:
             edge_key = f"{flow['source']} → {flow['destination']}"
             threat_label = edge_threats.get(edge_key, [])
@@ -117,23 +118,24 @@ def generate_diagram(threats):
             st.session_state.generated_diagram = base64.b64encode(f.read()).decode("utf-8")
         return st.session_state.generated_diagram
     except ExecutableNotFound:
-        st.session_state.error = "Graphviz executable not found. Falling back to ASCII diagram with threat labels."
+        st.session_state.error = "Graphviz executable not found. Falling back to ASCII diagram with numbered threat IDs."
         return None
     except Exception as e:
         st.session_state.error = f"Failed to generate diagram: {str(e)}"
         return None
 
 def fallback_ascii_diagram(threats):
-    """Generate a fallback ASCII diagram with threat labels."""
+    """Generate a fallback ASCII diagram with numbered threat IDs."""
     # Map threats to DFD elements
     edge_threats = {}
     node_threats = {}
     for threat in threats:
         dfd_element = threat.get("dfd_element", "")
+        threat_id = threat.get("id", "")
         if "→" in dfd_element:
-            edge_threats.setdefault(dfd_element, []).append(threat["type"])
+            edge_threats.setdefault(dfd_element, []).append(f"{threat_id}: {threat['type']}")
         else:
-            node_threats.setdefault(dfd_element, []).append(threat["type"])
+            node_threats.setdefault(dfd_element, []).append(f"{threat_id}: {threat['type']}")
 
     diagram = """
 +----------------+       +----------------+       +----------------+
@@ -167,11 +169,14 @@ def fallback_ascii_diagram(threats):
     )
 
 def analyze_threats():
-    """Perform STRIDE-based threat analysis with DFD element labeling."""
+    """Perform STRIDE-based threat analysis with numbered threat IDs."""
     threats = []
+    threat_counter = 1
 
     def add_threat(threat_type, description, stride, mitigation, asvs, samm, dfd_element, controls=None):
+        nonlocal threat_counter
         threat = {
+            "id": f"T{threat_counter}",
             "type": threat_type,
             "description": description,
             "stride": stride,
@@ -183,6 +188,7 @@ def analyze_threats():
         if controls:
             threat["controls"] = controls
         threats.append(threat)
+        threat_counter += 1
 
     # Predefined e-commerce threats
     add_threat(
@@ -416,9 +422,9 @@ def step_2():
         preview_threats = analyze_threats().get("threats", [])
         diagram = generate_diagram(preview_threats)
         if diagram:
-            st.image(f"data:image/png;base64,{diagram}", caption="Generated Data Flow Diagram with Threat Labels")
+            st.image(f"data:image/png;base64,{diagram}", caption="Generated Data Flow Diagram with Numbered Threat IDs")
         else:
-            st.markdown("**Fallback ASCII Diagram with Threat Labels**:")
+            st.markdown("**Fallback ASCII Diagram with Numbered Threat IDs**:")
             st.code(fallback_ascii_diagram(preview_threats), language="text")
             if st.session_state.error:
                 st.error(st.session_state.error)
@@ -434,7 +440,7 @@ def step_2():
 
 def step_3():
     st.header("Step 3: Threat Model Results")
-    st.markdown("Below are the identified threats, labeled against Data Flow Diagram (DFD) elements (components, data flows, trust boundaries).")
+    st.markdown("Below are the identified threats, labeled with numeric IDs (e.g., T1, T2) and mapped to Data Flow Diagram (DFD) elements. Refer to the DFD for threat locations.")
     if st.session_state.threat_model:
         st.subheader("Identified Threats")
         # Group threats by DFD element
@@ -446,7 +452,7 @@ def step_3():
         for dfd_element, threats in dfd_elements.items():
             st.markdown(f"### Threats for {dfd_element}")
             for threat in threats:
-                with st.expander(f"{threat['type']} (STRIDE: {threat['stride']})"):
+                with st.expander(f"{threat['id']}: {threat['type']} (STRIDE: {threat['stride']})"):
                     st.markdown(f"- **Description**: {threat['description']}")
                     st.markdown(f"- **Mitigation**: {threat['mitigation']}")
                     if "controls" in threat:
@@ -456,10 +462,10 @@ def step_3():
                     st.markdown(f"- **DFD Element**: {threat['dfd_element']}")
 
     if st.session_state.generated_diagram:
-        st.subheader("Generated Data Flow Diagram with Threat Labels")
-        st.image(f"data:image/png;base64,{st.session_state.generated_diagram}", caption="Data Flow Diagram with Threat Labels")
+        st.subheader("Generated Data Flow Diagram with Numbered Threat IDs")
+        st.image(f"data:image/png;base64,{st.session_state.generated_diagram}", caption="Data Flow Diagram with Numbered Threat IDs")
     else:
-        st.markdown("**Fallback ASCII Diagram with Threat Labels**:")
+        st.markdown("**Fallback ASCII Diagram with Numbered Threat IDs**:")
         st.code(fallback_ascii_diagram(st.session_state.threat_model.get("threats", [])), language="text")
     if st.button("Start Over"):
         st.session_state.step = 1
@@ -491,7 +497,7 @@ st.markdown("""
 1. **Map Data Flows**: Diagram how data moves to identify vulnerabilities.
 2. **Define Trust Boundaries**: Mark where trust levels change (e.g., client to server).
 3. **Apply STRIDE**: Analyze each component and data flow systematically.
-4. **Label Threats**: Associate threats with specific DFD elements for clarity.
+4. **Use Numbered Threat IDs**: Assign IDs (e.g., T1, T2) to map threats to DFD elements.
 5. **Involve the Team**: Get perspectives from developers, designers, and stakeholders.
 6. **Iterate**: Update the threat model when the system changes.
 7. **Document**: Record threats, mitigations, and DFD mappings for reference.
