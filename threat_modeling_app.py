@@ -1,0 +1,430 @@
+import streamlit as st
+import base64
+import json
+import re
+from graphviz import Digraph, ExecutableNotFound
+
+# Streamlit app configuration
+st.set_page_config(page_title="Threat Modeling 101", page_icon="🔒", layout="wide")
+
+# Initialize session state
+if 'step' not in st.session_state:
+    st.session_state.step = 1
+if 'text_input' not in st.session_state:
+    st.session_state.text_input = (
+        "E-commerce web app with a React frontend, Node.js backend API, MySQL database, and Stripe payment gateway. "
+        "The app is public-facing, handles user authentication, and processes sensitive data like PII and payment details."
+    )
+if 'diagram' not in st.session_state:
+    st.session_state.diagram = None
+if 'data_flows' not in st.session_state:
+    st.session_state.data_flows = [
+        {"source": "Frontend", "destination": "Backend", "dataType": "User Input (PII, Credentials)"},
+        {"source": "Backend", "destination": "Database", "dataType": "User Data, Orders"},
+        {"source": "Backend", "destination": "Payment Gateway", "dataType": "Payment Details"}
+    ]
+if 'trust_boundaries' not in st.session_state:
+    st.session_state.trust_boundaries = [
+        {"name": "Frontend Boundary", "description": "Untrusted client-side React app running on user devices"},
+        {"name": "Backend Boundary", "description": "Trusted server-side Node.js API and MySQL database"},
+        {"name": "Payment Gateway Boundary", "description": "External third-party Stripe service"}
+    ]
+if 'threat_model' not in st.session_state:
+    st.session_state.threat_model = None
+if 'error' not in st.session_state:
+    st.session_state.error = ""
+if 'generated_diagram' not in st.session_state:
+    st.session_state.generated_diagram = None
+
+# Title and introduction
+st.title("Threat Modeling 101: Learn with an E-commerce Example")
+st.markdown("""
+Welcome to *Threat Modeling 101*! This app teaches you how to identify and mitigate security threats using the **STRIDE** framework, focusing on **Data Flow** and **Trust Boundaries**. We'll use a predefined e-commerce web app example, but you can modify it or create your own system.
+""")
+
+# Section: Key Concepts
+st.header("Key Concepts")
+st.subheader("STRIDE Framework")
+st.markdown("""
+**STRIDE** (developed by Microsoft) categorizes threats:
+- **Spoofing**: Impersonating a user or system (e.g., stealing credentials).
+- **Tampering**: Modifying data/code (e.g., altering prices).
+- **Repudiation**: Avoiding accountability (e.g., disabling logs).
+- **Information Disclosure**: Exposing sensitive data (e.g., leaking PII).
+- **Denial of Service**: Disrupting availability (e.g., flooding a server).
+- **Elevation of Privilege**: Gaining unauthorized access (e.g., becoming admin).
+""")
+st.subheader("Data Flow")
+st.markdown("""
+**Data Flow** shows how data moves between system components (e.g., from a browser to a server). Mapping data flows helps identify where threats like tampering or interception can occur.
+""")
+st.subheader("Trust Boundaries")
+st.markdown("""
+**Trust Boundaries** separate components with different trust levels (e.g., untrusted client vs. trusted server). Vulnerabilities often arise when data crosses these boundaries.
+""")
+
+def generate_diagram():
+    """Generate a diagram from data flows and trust boundaries using Graphviz."""
+    try:
+        dot = Digraph(comment="Data Flow Diagram", format="png")
+        dot.attr(rankdir="LR", size="8,5")
+
+        # Add nodes for data flow sources and destinations
+        nodes = set()
+        for flow in st.session_state.data_flows:
+            nodes.add(flow["source"])
+            nodes.add(flow["destination"])
+        for node in nodes:
+            dot.node(node, node, shape="box")
+
+        # Add data flow edges
+        for flow in st.session_state.data_flows:
+            dot.edge(flow["source"], flow["destination"], label=flow["dataType"])
+
+        # Add trust boundaries as subgraphs
+        for boundary in st.session_state.trust_boundaries:
+            with dot.subgraph(name=f"cluster_{boundary['name']}") as c:
+                c.attr(label=boundary["name"], style="dashed")
+                components = re.findall(r"\b\w+\b", boundary["description"].lower())
+                for node in nodes:
+                    if node.lower() in components or node.lower() in boundary["name"].lower():
+                        c.node(node)
+
+        # Render diagram to file and encode as base64
+        diagram_path = dot.render("diagram", format="png", cleanup=True)
+        with open(diagram_path, "rb") as f:
+            st.session_state.generated_diagram = base64.b64encode(f.read()).decode("utf-8")
+        return st.session_state.generated_diagram
+    except ExecutableNotFound:
+        st.session_state.error = "Graphviz executable not found. Falling back to ASCII diagram."
+        return None
+    except Exception as e:
+        st.session_state.error = f"Failed to generate diagram: {str(e)}"
+        return None
+
+def fallback_ascii_diagram():
+    """Generate a fallback ASCII diagram for the e-commerce app."""
+    return """
++----------------+       +----------------+       +----------------+
+|    Frontend    | <---> |    Backend     | <---> |    Database    |
+|   (React App)  |       |   (Node.js)    |       |    (MySQL)     |
+|   [Untrusted]  |       |   [Trusted]    |       |   [Trusted]    |
++----------------+       +----------------+       +----------------+
+       ||                        |
+       ||                        v
+       ||                 +----------------+
+       ||                 | Payment Gateway |
+       ||                 |   (Stripe)     |
+       ||                 | [External Trust]|
+       ||                 +----------------+
+       ========= Trust Boundary =========
+    """
+
+def analyze_threats():
+    """Perform STRIDE-based threat analysis for the e-commerce app."""
+    threats = []
+
+    def add_threat(threat_type, description, stride, mitigation, asvs, samm, controls=None):
+        threat = {
+            "type": threat_type,
+            "description": description,
+            "stride": stride,
+            "mitigation": mitigation,
+            "asvs": asvs,
+            "samm": samm
+        }
+        if controls:
+            threat["controls"] = controls
+        threats.append(threat)
+
+    # Predefined e-commerce threats
+    add_threat(
+        "Spoofing",
+        "Hackers impersonate users by stealing credentials at the Frontend → Backend data flow.",
+        "Spoofing",
+        "Implement multi-factor authentication and secure session management.",
+        "V2.1.1 - Verify strong authentication; V2.7.1 - Verify session management.",
+        "Threat Assessment Level 1 - Identify authentication risks; Governance Level 2 - Define policies.",
+        controls="Use MFA (e.g., TOTP) and HTTP-only, Secure cookies."
+    )
+    add_threat(
+        "Tampering",
+        "Users modify cart data (e.g., price) in the Frontend → Backend data flow.",
+        "Tampering",
+        "Validate inputs server-side and use signed tokens for integrity.",
+        "V5.1.3 - Verify input validation; V5.3.4 - Verify secure queries.",
+        "Secure Architecture Level 1 - Define security requirements; Design Level 2 - Integrity controls.",
+        controls="Use HMAC-SHA256 for data integrity and whitelist input validation."
+    )
+    add_threat(
+        "Repudiation",
+        "Users deny placing orders due to missing logs in Backend → Database flow.",
+        "Repudiation",
+        "Log all user actions with timestamps and IDs.",
+        "V7.1.1 - Verify logging controls; V7.2.1 - Verify log integrity.",
+        "Security Operations Level 2 - Enable audit logging; Incident Management Level 2 - Monitor logs.",
+        controls="Use AWS CloudTrail for logging and ensure log integrity."
+    )
+    add_threat(
+        "Information Disclosure",
+        "Sensitive data exposed in Backend → Database or Backend → Payment Gateway flows.",
+        "Information Disclosure",
+        "Use HTTPS and encrypt sensitive database fields.",
+        "V9.1.1 - Verify secure communication; V4.1.3 - Verify access controls.",
+        "Implementation Level 2 - Secure data handling; Operations Level 2 - Protect data.",
+        controls="Enable TLS 1.3 and use AES-256 for database encryption."
+    )
+    add_threat(
+        "Denial of Service",
+        "Flooding the Frontend → Backend data flow disrupts availability.",
+        "Denial of Service",
+        "Implement rate limiting and use a CDN for traffic spikes.",
+        "V1.10.1 - Verify anti-DoS controls; V13.1.1 - Verify API resilience.",
+        "Incident Management Level 2 - Monitor for DoS; Operations Level 2 - Ensure availability.",
+        controls="Configure rate limiting (100 requests/min) and use AWS CloudFront."
+    )
+    add_threat(
+        "Elevation of Privilege",
+        "Weak role-based access controls in Backend allow privilege escalation.",
+        "Elevation of Privilege",
+        "Enforce strict RBAC and validate roles server-side.",
+        "V4.2.1 - Verify RBAC; V4.2.2 - Verify segregation of duties.",
+        "Secure Architecture Level 2 - Implement RBAC; Governance Level 2 - Audit permissions.",
+        controls="Use AWS IAM roles with least privilege."
+    )
+
+    # Analyze user-defined data flows
+    for flow in st.session_state.data_flows:
+        data_type = flow.get('dataType', '').lower()
+        source = flow.get('source', '').lower()
+        destination = flow.get('destination', '').lower()
+
+        if 'user' in source or 'client' in source:
+            add_threat(
+                "Spoofing",
+                f"Unauthorized access in flow from {source} to {destination}.",
+                "Spoofing",
+                "Validate source identity with OAuth 2.0 or JWT.",
+                "V2.1.2 - Verify identity validation; V2.7.3 - Verify session binding.",
+                "Threat Assessment Level 1 - Identify risks; Governance Level 2 - Enforce policies.",
+                controls="Use OAuth 2.0 with PKCE and RS256 JWT signing."
+            )
+        add_threat(
+            "Tampering",
+            f"Data integrity risk in flow from {source} to {destination}.",
+            "Tampering",
+            "Use digital signatures and validate inputs at destination.",
+            "V5.1.4 - Verify data integrity; V5.2.2 - Verify input sanitization.",
+            "Design Level 2 - Integrity controls; Verification Level 1 - Validate inputs.",
+            controls="Apply HMAC-SHA256 and schema-based validation."
+        )
+        if 'pii' in data_type or 'sensitive' in data_type:
+            add_threat(
+                "Information Disclosure",
+                f"Sensitive data ({data_type}) exposed in flow from {source} to {destination}.",
+                "Information Disclosure",
+                "Encrypt data with TLS 1.3 and mask sensitive data in logs.",
+                "V9.1.2 - Verify encryption; V4.1.4 - Verify access restrictions.",
+                "Implementation Level 2 - Secure data; Operations Level 2 - Protect data.",
+                controls="Use TLS 1.3 and data masking for logs."
+            )
+
+    # Analyze trust boundaries
+    for boundary in st.session_state.trust_boundaries:
+        name = boundary.get('name', '').lower()
+        description = boundary.get('description', '').lower()
+
+        if 'boundary' in name or 'frontend' in name:
+            add_threat(
+                "Spoofing",
+                f"Cross-boundary spoofing in {name}.",
+                "Spoofing",
+                "Enforce mutual TLS and validate cross-boundary requests.",
+                "V2.1.3 - Verify boundary authentication; V13.2.1 - Verify API security.",
+                "Threat Assessment Level 2 - Model boundary risks; Governance Level 2 - Define policies.",
+                controls="Use mutual TLS with client certificates."
+            )
+        if 'database' in name or 'backend' in name:
+            add_threat(
+                "Tampering",
+                f"Data tampering within {name} due to weak controls.",
+                "Tampering",
+                "Use integrity checks and secure coding practices.",
+                "V5.1.3 - Verify input validation; V5.3.5 - Verify secure coding.",
+                "Design Level 2 - Integrity controls; Verification Level 2 - Validate controls.",
+                controls="Apply SHA-256 checksums and OWASP guidelines."
+            )
+
+    return {"threats": threats}
+
+def step_1():
+    st.header("Step 1: Provide System Details")
+    st.markdown("""
+    **Default Example**: E-commerce web app with a React frontend, Node.js backend, MySQL database, and Stripe payment gateway. 
+    Feel free to use this example or describe your own system below.
+    """)
+    st.session_state.text_input = st.text_area(
+        "Describe your system architecture (e.g., components, technologies, public-facing, third-party services)",
+        st.session_state.text_input,
+        height=200
+    )
+    uploaded_file = st.file_uploader("Upload a Data Flow Diagram (e.g., PNG, JPG)", type=["png", "jpg", "jpeg"])
+    if uploaded_file:
+        st.session_state.diagram = base64.b64encode(uploaded_file.read()).decode("utf-8")
+        st.image(uploaded_file, caption="Uploaded Data Flow Diagram")
+    if st.button("Next"):
+        if st.session_state.text_input or st.session_state.diagram:
+            st.session_state.step = 2
+            st.rerun()
+        else:
+            st.session_state.error = "Please provide a system description or diagram."
+
+def step_2():
+    st.header("Step 2: Define Data Flows and Trust Boundaries")
+    st.markdown("""
+    **Default E-commerce Data Flows**:
+    - Frontend → Backend (User Input: PII, Credentials)
+    - Backend → Database (User Data, Orders)
+    - Backend → Payment Gateway (Payment Details)
+
+    **Default Trust Boundaries**:
+    - Frontend Boundary: Untrusted client-side React app
+    - Backend Boundary: Trusted server-side Node.js API and MySQL database
+    - Payment Gateway Boundary: External third-party Stripe service
+
+    Modify or add new data flows and trust boundaries below.
+    """)
+    
+    st.subheader("Data Flows")
+    with st.container():
+        source = st.text_input("Data Flow Source (e.g., User, API)", key="data_flow_source")
+        destination = st.text_input("Data Flow Destination (e.g., Database, Service)", key="data_flow_destination")
+        data_type = st.text_input("Data Type (e.g., PII, Public, Confidential)", key="data_flow_type")
+        if st.button("Add Data Flow"):
+            if source and destination and data_type:
+                st.session_state.data_flows.append({"source": source, "destination": destination, "dataType": data_type})
+                st.success("Data Flow added!")
+                st.rerun()
+            else:
+                st.session_state.error = "Please fill in all data flow fields."
+    
+    if st.session_state.data_flows:
+        st.write("**Current Data Flows:**")
+        for flow in st.session_state.data_flows:
+            st.write(f"{flow['source']} → {flow['destination']} ({flow['dataType']})")
+
+    st.subheader("Trust Boundaries")
+    with st.container():
+        trust_boundary_options = [
+            "Web Server Boundary",
+            "Database Boundary",
+            "API Boundary",
+            "Frontend Boundary",
+            "Payment Gateway Boundary",
+            "Custom"
+        ]
+        selected_boundary = st.selectbox("Select Trust Boundary", trust_boundary_options, key="trust_boundary_select")
+        name = selected_boundary
+        if selected_boundary == "Custom":
+            name = st.text_input("Custom Trust Boundary Name", key="custom_boundary_name")
+        description = st.text_input("Trust Boundary Description", key="boundary_description")
+        if st.button("Add Trust Boundary"):
+            if name and description and name != "Custom":
+                st.session_state.trust_boundaries.append({"name": name, "description": description})
+                st.success("Trust Boundary added!")
+                st.rerun()
+            else:
+                st.session_state.error = "Please provide a valid trust boundary name and description."
+    
+    if st.session_state.trust_boundaries:
+        st.write("**Current Trust Boundaries:**")
+        for boundary in st.session_state.trust_boundaries:
+            st.write(f"{boundary['name']}: {boundary['description']}")
+
+    if st.session_state.data_flows or st.session_state.trust_boundaries:
+        st.subheader("Generated Data Flow Diagram")
+        diagram = generate_diagram()
+        if diagram:
+            st.image(f"data:image/png;base64,{diagram}", caption="Generated Data Flow Diagram with Trust Boundaries")
+        else:
+            st.markdown("**Fallback ASCII Diagram**:")
+            st.code(fallback_ascii_diagram(), language="text")
+            if st.session_state.error:
+                st.error(st.session_state.error)
+
+    if st.button("Analyze Threats"):
+        if st.session_state.data_flows or st.session_state.trust_boundaries:
+            with st.spinner("Analyzing threats..."):
+                st.session_state.threat_model = analyze_threats()
+                st.session_state.step = 3
+                st.rerun()
+        else:
+            st.session_state.error = "Please add at least one data flow or trust boundary."
+
+def step_3():
+    st.header("Step 3: Threat Model Results")
+    st.markdown("Below are the identified threats for the e-commerce app (or your custom system), analyzed using STRIDE.")
+    if st.session_state.threat_model:
+        st.subheader("Identified Threats")
+        for threat in st.session_state.threat_model["threats"]:
+            with st.expander(f"{threat['type']} (STRIDE: {threat['stride']})"):
+                st.markdown(f"- **Description**: {threat['description']}")
+                st.markdown(f"- **Mitigation**: {threat['mitigation']}")
+                if "controls" in threat:
+                    st.markdown(f"- **Security Controls**: {threat['controls']}")
+                st.markdown(f"- **OWASP ASVS**: {threat['asvs']}")
+                st.markdown(f"- **OWASP SAMM**: {threat['samm']}")
+    if st.session_state.generated_diagram:
+        st.subheader("Generated Data Flow Diagram")
+        st.image(f"data:image/png;base64,{st.session_state.generated_diagram}", caption="Data Flow Diagram with Trust Boundaries")
+    else:
+        st.markdown("**Fallback ASCII Diagram**:")
+        st.code(fallback_ascii_diagram(), language="text")
+    if st.button("Start Over"):
+        st.session_state.step = 1
+        st.session_state.text_input = (
+            "E-commerce web app with a React frontend, Node.js backend API, MySQL database, and Stripe payment gateway. "
+            "The app is public-facing, handles user authentication, and processes sensitive data like PII and payment details."
+        )
+        st.session_state.diagram = None
+        st.session_state.data_flows = [
+            {"source": "Frontend", "destination": "Backend", "dataType": "User Input (PII, Credentials)"},
+            {"source": "Backend", "destination": "Database", "dataType": "User Data, Orders"},
+            {"source": "Backend", "destination": "Payment Gateway", "dataType": "Payment Details"}
+        ]
+        st.session_state.trust_boundaries = [
+            {"name": "Frontend Boundary", "description": "Untrusted client-side React app running on user devices"},
+            {"name": "Backend Boundary", "description": "Trusted server-side Node.js API and MySQL database"},
+            {"name": "Payment Gateway Boundary", "description": "External third-party Stripe service"}
+        ]
+        st.session_state.threat_model = None
+        st.session_state.error = ""
+        st.session_state.generated_diagram = None
+        st.rerun()
+    if st.session_state.error:
+        st.error(st.session_state.error)
+
+# Section: Tips for Threat Modeling
+st.header("Tips for Effective Threat Modeling")
+st.markdown("""
+1. **Map Data Flows**: Diagram how data moves to identify vulnerabilities.
+2. **Define Trust Boundaries**: Mark where trust levels change (e.g., client to server).
+3. **Apply STRIDE**: Analyze each component and data flow systematically.
+4. **Involve the Team**: Get perspectives from developers, designers, and stakeholders.
+5. **Iterate**: Update the threat model when the system changes.
+6. **Document**: Record threats, mitigations, and boundaries for reference.
+""")
+
+# Render the current step
+if st.session_state.step == 1:
+    step_1()
+elif st.session_state.step == 2:
+    step_2()
+elif st.session_state.step == 3:
+    step_3()
+
+# Footer
+st.markdown("""
+---
+*Built with Streamlit | Learn more at [OWASP](https://owasp.org/www-community/Threat_Modeling) or [Microsoft STRIDE](https://docs.microsoft.com/en-us/azure/security/develop/threat-modeling-tool-threats).*
+""")
