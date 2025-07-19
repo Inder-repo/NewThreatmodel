@@ -1,800 +1,653 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Threat Modeling: Cars Security Story</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+import streamlit as st
+import base64
+import re
+from graphviz import Digraph, ExecutableNotFound
+from PIL import Image, ImageDraw, ImageFont
+import io
+
+# Streamlit app configuration
+st.set_page_config(page_title="Threat Modeling 101", page_icon="🔒", layout="wide")
+
+# Current date and time (05:47 PM AEST, Saturday, July 19, 2025)
+current_datetime = "05:47 PM AEST, Saturday, July 19, 2025"
+
+# Initialize session state
+if 'step' not in st.session_state:
+    st.session_state.step = 1
+if 'text_input' not in st.session_state:
+    st.session_state.text_input = (
+        "E-commerce web app with a React frontend, Node.js backend API, MySQL database, and Stripe payment gateway. "
+        "The app is public-facing, handles user authentication, and processes sensitive data like PII and payment details."
+    )
+if 'diagram' not in st.session_state:
+    st.session_state.diagram = None
+if 'data_flows' not in st.session_state:
+    st.session_state.data_flows = [
+        {"source": "Frontend", "destination": "Backend", "dataType": "User Input (PII, Credentials)"},
+        {"source": "Backend", "destination": "Database", "dataType": "User Data, Orders"},
+        {"source": "Backend", "destination": "Payment Gateway", "dataType": "Payment Details"}
+    ]
+if 'trust_boundaries' not in st.session_state:
+    st.session_state.trust_boundaries = [
+        {"name": "Frontend Boundary", "description": "Untrusted client-side React app running on user devices"},
+        {"name": "Backend Boundary", "description": "Trusted server-side Node.js API and MySQL database"},
+        {"name": "Payment Gateway Boundary", "description": "External third-party Stripe service"}
+    ]
+if 'threat_model' not in st.session_state:
+    st.session_state.threat_model = None
+if 'error' not in st.session_state:
+    st.session_state.error = ""
+if 'generated_diagram' not in st.session_state:
+    st.session_state.generated_diagram = None
+if 'uploaded_image' not in st.session_state:
+    st.session_state.uploaded_image = None
+
+# Title and introduction
+st.title("Threat Modeling 101: E-commerce Example with Enhanced DFD")
+st.markdown(f"""
+Welcome to *Threat Modeling 101*! This app teaches you how to identify and mitigate security threats using the **STRIDE** framework, focusing on **Data Flow** and **Trust Boundaries**. Threats are assigned numeric IDs (e.g., T1, T2) and mapped to a Data Flow Diagram (DFD) with improved visuals. Generated on: {current_datetime}.
+""")
+
+# Section: What is Threat Modeling?
+st.header("What is Threat Modeling?")
+st.markdown("""
+**Proactive Security**  
+Identify threats before they become vulnerabilities.
+
+**Risk Assessment**  
+Evaluate potential impact and likelihood of threats.
+
+**Design Integration**  
+Build security into the system architecture.
+
+**Stakeholder Communication**  
+Bridge gap between security and business teams.
+
+**Key Questions Answered:**  
+• What are we building?  
+• What can go wrong?  
+• What should we do about it?  
+• Did we do a good job?
+
+**STRIDE Methodology**  
+Six categories of security threats:  
+- **S - Spoofing**: Impersonating users, processes, or systems to gain unauthorized access.  
+- **T - Tampering**: Unauthorized modification of data, code, or system configurations.  
+- **R - Repudiation**: Denial of actions performed, lack of non-repudiation mechanisms.  
+- **I - Information Disclosure**: Unauthorized access to confidential or sensitive information.  
+- **D - Denial of Service**: Making systems or services unavailable to legitimate users.  
+- **E - Elevation of Privilege**: Gaining higher access rights than originally authorized.
+
+**Data Flow Diagrams (DFD)**  
+Visual representation of how data moves through a system:  
+- **User/Actor** → **Web Application** → **Database**  
+- **Authentication Service** ↕ **User Credentials**  
+- **External Attacker** ⚠ **Network Boundary**  
+- **External Entities**: Users, systems, or services outside your control.  
+- **Processes**: Applications, services, or functions that transform data.  
+- **Data Stores**: Databases, files, or repositories where data is stored.  
+- **Data Flows**: Movement of information between components.  
+- **Trust Boundaries**: Lines where security controls change or trust levels differ (e.g., Internet Boundary, DMZ Boundary, Internal Network).
+
+**Example Trust Boundaries:**  
+• Network perimeters (firewalls)  
+• Process boundaries  
+• User privilege levels  
+• Administrative domains  
+• Cloud service boundaries
+
+**Original Conceptual Model**  
+📊 Data 💎 Value ⚠️ Risk 🏗️ System 🎯 Threat ⚙️ Functionality 🔓 Weakness 🛡️ Vulnerability  
+- **Actor** Creates/Informs/Has/Exposes/Generates/Creates/Causes/Contains/Exploits/Breaks/Results in/Exploitable  
+- **Key Relationships**: Systems contain Data that creates business Value. Actors can exploit Threats that target Weaknesses in system Functionality, ultimately creating Vulnerabilities that generate Risk to organizational assets.
+
+**Enhanced System Model: E-Commerce Application Threat Model**  
+- **Customer** Causes **Social Engineering, SQL Injection, Session Hijacking** Generates **Risk**  
+- **E-Commerce Platform** Has **Customer Data, Payment Info, Order History** Creates **Business Value** Informs **Security Controls (Authentication, Encryption, Logging)** Creates **Weakness (Config errors, Missing patches)** Exploits **Vulnerability (Data breach, Service outage)**  
+- **↕ Exposes ↕ | ↕ Contains ↕ | ↕ Results in ↕**  
+- **Example Threats Identified:**  
+  - Spoofing: Fake login pages to steal credentials  
+  - Tampering: Modification of product prices in requests  
+  - Information Disclosure: Exposure of customer payment data  
+  - Denial of Service: Cart bombing to overwhelm the system
+
+**Threat Modeling Process**  
+1. Define Scope: Identify system boundaries, assets, and stakeholders  
+2. Create DFD: Map data flows, processes, and trust boundaries  
+3. Apply STRIDE: Systematically identify threats for each component  
+4. Assess Risk: Evaluate impact and likelihood of each threat  
+5. Mitigate: Design and implement appropriate security controls  
+6. Validate: Review effectiveness and update as needed  
+
+**Best Practices:**  
+• Start early in design phase  
+• Include diverse stakeholders  
+• Keep models updated  
+• Focus on high-value assets  
+• Document assumptions and decisions
+
+**Key Takeaways**  
+- **STRIDE**: Comprehensive framework for categorizing and identifying security threats systematically.  
+- **Data Flow Diagrams**: Visual tools that help understand system architecture and data movement patterns.  
+- **Trust Boundaries**: Critical points where security controls change and threats are most likely to occur.  
+- **Remember**: Threat modeling is not a one-time activity but an ongoing process that should evolve with your system. Start simple, iterate often, and always consider the attacker's perspective.
+""")
+
+# Section: Key Concepts
+st.header("Key Concepts")
+st.subheader("Threat Labeling with IDs")
+st.markdown("""
+Each threat is assigned a unique ID (e.g., T1, T2) and mapped to DFD elements (components, data flows, trust boundaries) with clear visuals.
+""")
+
+def annotate_image(image_data, threats):
+    """Annotate the uploaded image with data flows, trust boundaries, threat IDs, and date/time."""
+    try:
+        image = Image.open(io.BytesIO(base64.b64decode(image_data)))
+        draw = ImageDraw.Draw(image)
+        font = ImageFont.load_default()
+
+        # Add date/time at the top
+        draw.text((10, 10), f"Generated on: {current_datetime}", fill="black", font=font)
+
+        # Map threats to elements
+        node_threats = {}
+        edge_threats = {}
+        for threat in threats:
+            dfd_element = threat.get("dfd_element", "")
+            threat_id = threat.get("id", "")
+            if "→" in dfd_element:
+                edge_threats.setdefault(dfd_element, []).append(f"{threat_id}: {threat['type']}")
+            else:
+                node_threats.setdefault(dfd_element, []).append(f"{threat_id}: {threat['type']}")
+
+        # Annotate with data flows and trust boundaries
+        y_offset = 30
+        x_start = 10
+        for flow in st.session_state.data_flows:
+            edge_key = f"{flow['source']} → {flow['destination']}"
+            threat_label = edge_threats.get(edge_key, ["None"])
+            text = f"{flow['source']} → {flow['destination']} ({flow['dataType']}): {', '.join(threat_label)}"
+            draw.text((x_start, y_offset), text, fill="black", font=font)
+            y_offset += 20
+
+        for boundary in st.session_state.trust_boundaries:
+            threat_label = node_threats.get(boundary["name"], ["None"])
+            text = f"{boundary['name']} ({boundary['description']}): {', '.join(threat_label)}"
+            draw.text((x_start, y_offset), text, fill="black", font=font)
+            y_offset += 20
+
+        # Save annotated image to base64
+        buffered = io.BytesIO()
+        image.save(buffered, format="PNG")
+        return base64.b64encode(buffered.getvalue()).decode("utf-8")
+    except Exception as e:
+        st.session_state.error = f"Failed to annotate image: {str(e)}"
+        return image_data
+
+def generate_diagram(threats):
+    """Generate a refined DFD with numbered threat IDs and date/time using Graphviz."""
+    try:
+        dot = Digraph(comment="Data Flow Diagram", format="png")
+        dot.attr(rankdir="TB", size="10,8", fontname="Arial", bgcolor="white", splines="polyline")
+        dot.attr("node", fontname="Arial", fontsize="12")
+        dot.attr("edge", fontname="Arial", fontsize="10")
+        dot.attr(label=f"Data Flow Diagram\nGenerated on: {current_datetime}", labelloc="t", fontname="Arial", fontsize="14")
+
+        node_styles = {
+            "Frontend": {"shape": "oval", "style": "filled", "fillcolor": "lightcoral", "color": "red"},
+            "Backend": {"shape": "box", "style": "filled", "fillcolor": "lightblue", "color": "blue"},
+            "Database": {"shape": "cylinder", "style": "filled", "fillcolor": "lightblue", "color": "blue"},
+            "Payment Gateway": {"shape": "oval", "style": "filled", "fillcolor": "lightgreen", "color": "green"}
         }
+
+        nodes = set()
+        for flow in st.session_state.data_flows:
+            nodes.add(flow["source"])
+            nodes.add(flow["destination"])
         
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
+        node_threats = {}
+        edge_threats = {}
+        for threat in threats:
+            dfd_element = threat.get("dfd_element", "")
+            threat_id = threat.get("id", "")
+            if "→" in dfd_element:
+                edge_threats.setdefault(dfd_element, []).append(f"{threat_id}: {threat['type']}")
+            else:
+                node_threats.setdefault(dfd_element, []).append(f"{threat_id}: {threat['type']}")
+
+        for node in nodes:
+            threat_label = node_threats.get(node, [])
+            label = f"{node}\nThreats: {', '.join(threat_label) if threat_label else 'None'}"
+            style = node_styles.get(node, {"shape": "box", "style": "filled", "fillcolor": "white", "color": "black"})
+            dot.node(node, label, **style, penwidth="2" if threat_label else "1")
+
+        for flow in st.session_state.data_flows:
+            edge_key = f"{flow['source']} → {flow['destination']}"
+            threat_label = edge_threats.get(edge_key, [])
+            label = f"{flow['dataType']}\nThreats: {', '.join(threat_label) if threat_label else 'None'}"
+            dot.edge(flow["source"], flow["destination"], label=label, color="red" if threat_label else "black", penwidth="2" if threat_label else "1")
+
+        for boundary in st.session_state.trust_boundaries:
+            with dot.subgraph(name=f"cluster_{boundary['name']}") as c:
+                c.attr(label=f"{boundary['name']}\nThreats: {', '.join(node_threats.get(boundary['name'], []) or ['None'])}", 
+                       style="dashed", color="purple", fontname="Arial", fontsize="12", penwidth="2")
+                components = re.findall(r"\b\w+\b", boundary["description"].lower())
+                for node in nodes:
+                    if node.lower() in components or node.lower() in boundary["name"].lower():
+                        c.node(node)
+
+        diagram_path = dot.render("diagram", format="png", cleanup=True)
+        with open(diagram_path, "rb") as f:
+            st.session_state.generated_diagram = base64.b64encode(f.read()).decode("utf-8")
+        return st.session_state.generated_diagram
+    except ExecutableNotFound:
+        st.session_state.error = "Graphviz executable not found. Falling back to ASCII diagram with numbered threat IDs."
+        return None
+    except Exception as e:
+        st.session_state.error = f"Failed to generate diagram: {str(e)}"
+        return None
+
+def fallback_ascii_diagram(threats):
+    """Generate a refined ASCII diagram with numbered threat IDs, date/time, and legend table."""
+    edge_threats = {}
+    node_threats = {}
+    threat_details = {}
+    for threat in threats:
+        dfd_element = threat.get("dfd_element", "")
+        threat_id = threat.get("id", "")
+        threat_details[threat_id] = f"{threat['type']}: {threat['description']}"
+        if "→" in dfd_element:
+            edge_threats.setdefault(dfd_element, []).append(f"{threat_id}: {threat['type']}")
+        else:
+            node_threats.setdefault(dfd_element, []).append(f"{threat_id}: {threat['type']}")
+
+    diagram = f"""
+    Data Flow Diagram (Generated on: {current_datetime})
+    +----------------+         +----------------+         +----------------+
+    |    Frontend    |<------->|    Backend     |<------->|    Database    |
+    |   (React App)  |         |   (Node.js)    |         |    (MySQL)     |
+    |   [Untrusted]  |         |   [Trusted]    |         |   [Trusted]    |
+    | Threats: {frontend_threats} | Threats: {backend_threats} | Threats: {database_threats} |
+    +----------------+         +----------------+         +----------------+
+            |                          |
+            |                          v
+            |                   +----------------+
+            |                   | Payment Gateway |
+            |                   |   (Stripe)     |
+            |                   | [External Trust]|
+            |                   | Threats: {payment_threats} |
+            |                   +----------------+
+    ---- Trust Boundary ----
+
+    Data Flow Threats:
+      Frontend → Backend: {frontend_backend_threats}
+      Backend → Database: {backend_database_threats}
+      Backend → Payment Gateway: {backend_payment_threats}
+    """
+
+    legend = "\nThreat Legend:\n"
+    legend += "+-------+--------------------------+\n"
+    legend += "| ID    | Threat Description       |\n"
+    legend += "+-------+--------------------------+\n"
+    for threat_id, description in sorted(threat_details.items()):
+        legend += f"| {threat_id:<5} | {description:<24} |\n"
+    legend += "+-------+--------------------------+\n"
+
+    return diagram.format(
+        frontend_threats=", ".join(node_threats.get("Frontend", ["None"])),
+        backend_threats=", ".join(node_threats.get("Backend", ["None"])),
+        database_threats=", ".join(node_threats.get("Database", ["None"])),
+        payment_threats=", ".join(node_threats.get("Payment Gateway", ["None"])),
+        frontend_backend_threats=", ".join(edge_threats.get("Frontend → Backend", ["None"])),
+        backend_database_threats=", ".join(edge_threats.get("Backend → Database", ["None"])),
+        backend_payment_threats=", ".join(edge_threats.get("Backend → Payment Gateway", ["None"]))
+    ) + legend
+
+def analyze_threats():
+    """Perform STRIDE-based threat analysis with numbered threat IDs."""
+    threats = []
+    threat_counter = 1
+
+    def add_threat(threat_type, description, stride, mitigation, asvs, samm, dfd_element, controls=None):
+        nonlocal threat_counter
+        threat = {
+            "id": f"T{threat_counter}",
+            "type": threat_type,
+            "description": description,
+            "stride": stride,
+            "mitigation": mitigation,
+            "asvs": asvs,
+            "samm": samm,
+            "dfd_element": dfd_element
         }
-        
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            background: rgba(255, 255, 255, 0.95);
-            border-radius: 20px;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-            overflow: hidden;
-        }
-        
-        .header {
-            background: linear-gradient(45deg, #2c3e50, #3498db);
-            color: white;
-            text-align: center;
-            padding: 30px 20px;
-        }
-        
-        .header h1 {
-            font-size: 2.5em;
-            margin-bottom: 10px;
-            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
-        }
-        
-        .header p {
-            font-size: 1.2em;
-            opacity: 0.9;
-        }
-        
-        .story-nav {
-            display: flex;
-            justify-content: center;
-            gap: 20px;
-            padding: 20px;
-            background: #f8f9fa;
-            border-bottom: 2px solid #e9ecef;
-        }
-        
-        .nav-btn {
-            padding: 12px 24px;
-            background: linear-gradient(45deg, #667eea, #764ba2);
-            color: white;
-            border: none;
-            border-radius: 25px;
-            cursor: pointer;
-            font-size: 1.1em;
-            font-weight: 600;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
-        }
-        
-        .nav-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
-        }
-        
-        .nav-btn.active {
-            background: linear-gradient(45deg, #e74c3c, #c0392b);
-            box-shadow: 0 4px 15px rgba(231, 76, 60, 0.3);
-        }
-        
-        .story-content {
-            padding: 40px;
-            min-height: 600px;
-            display: none;
-        }
-        
-        .story-content.active {
-            display: block;
-            animation: fadeIn 0.5s ease-in;
-        }
-        
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        
-        .car-comparison {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 30px;
-            margin-top: 30px;
-        }
-        
-        .car-section {
-            background: white;
-            border-radius: 15px;
-            padding: 25px;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-            border: 3px solid transparent;
-            transition: all 0.3s ease;
-        }
-        
-        .car-section:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15);
-        }
-        
-        .normal-car {
-            border-color: #27ae60;
-        }
-        
-        .f1-car {
-            border-color: #e74c3c;
-        }
-        
-        .car-title {
-            font-size: 1.8em;
-            font-weight: bold;
-            margin-bottom: 15px;
-            text-align: center;
-            padding: 10px;
-            border-radius: 10px;
-            color: white;
-        }
-        
-        .normal-car .car-title {
-            background: linear-gradient(45deg, #27ae60, #2ecc71);
-        }
-        
-        .f1-car .car-title {
-            background: linear-gradient(45deg, #e74c3c, #c0392b);
-        }
-        
-        .car-visual {
-            text-align: center;
-            font-size: 4em;
-            margin: 20px 0;
-            animation: bounce 2s infinite;
-        }
-        
-        @keyframes bounce {
-            0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
-            40% { transform: translateY(-10px); }
-            60% { transform: translateY(-5px); }
-        }
-        
-        .threats-list, .controls-list {
-            margin: 20px 0;
-        }
-        
-        .threats-list h3, .controls-list h3 {
-            color: #2c3e50;
-            margin-bottom: 15px;
-            font-size: 1.3em;
-            border-bottom: 2px solid #3498db;
-            padding-bottom: 5px;
-        }
-        
-        .threat-item, .control-item {
-            background: #f8f9fa;
-            margin: 10px 0;
-            padding: 15px;
-            border-radius: 8px;
-            border-left: 4px solid;
-            transition: all 0.3s ease;
-        }
-        
-        .threat-item {
-            border-left-color: #e74c3c;
-        }
-        
-        .control-item {
-            border-left-color: #27ae60;
-        }
-        
-        .threat-item:hover, .control-item:hover {
-            transform: translateX(5px);
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
-        }
-        
-        .relevance-indicator {
-            display: inline-block;
-            padding: 5px 10px;
-            border-radius: 15px;
-            font-size: 0.8em;
-            font-weight: bold;
-            margin-left: 10px;
-        }
-        
-        .high-relevance {
-            background: #e74c3c;
-            color: white;
-        }
-        
-        .medium-relevance {
-            background: #f39c12;
-            color: white;
-        }
-        
-        .low-relevance {
-            background: #95a5a6;
-            color: white;
-        }
-        
-        .lesson-box {
-            background: linear-gradient(45deg, #667eea, #764ba2);
-            color: white;
-            padding: 25px;
-            border-radius: 15px;
-            margin: 30px 0;
-            text-align: center;
-            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
-        }
-        
-        .lesson-box h3 {
-            font-size: 1.5em;
-            margin-bottom: 15px;
-        }
-        
-        .interactive-element {
-            background: white;
-            border: 2px dashed #3498db;
-            border-radius: 10px;
-            padding: 20px;
-            margin: 20px 0;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-        
-        .interactive-element:hover {
-            background: #ecf0f1;
-            border-color: #2980b9;
-            transform: scale(1.02);
-        }
-        
-        .scenario-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 20px;
-            margin: 30px 0;
-        }
-        
-        .scenario-card {
-            background: white;
-            border-radius: 12px;
-            padding: 20px;
-            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
-            border-top: 4px solid #3498db;
-            transition: all 0.3s ease;
-        }
-        
-        .scenario-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.15);
-        }
-        
-        @media (max-width: 768px) {
-            .car-comparison {
-                grid-template-columns: 1fr;
-            }
-            
-            .story-nav {
-                flex-direction: column;
-                gap: 10px;
-            }
-            
-            .nav-btn {
-                width: 100%;
-            }
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>🚗 Threat Modeling Through Cars 🏎️</h1>
-            <p>Understanding how different environments require different security controls</p>
-        </div>
-        
-        <div class="story-nav">
-            <button class="nav-btn active" onclick="showStory('intro')">Introduction</button>
-            <button class="nav-btn" onclick="showStory('fundamentals')">TM Fundamentals</button>
-            <button class="nav-btn" onclick="showStory('threats')">Threat Analysis</button>
-            <button class="nav-btn" onclick="showStory('controls')">Security Controls</button>
-            <button class="nav-btn" onclick="showStory('lessons')">Key Lessons</button>
-        </div>
-        
-        <div id="intro" class="story-content active">
-            <h2 style="text-align: center; color: #2c3e50; margin-bottom: 30px;">The Tale of Two Cars</h2>
-            
-            <div class="car-comparison">
-                <div class="car-section normal-car">
-                    <div class="car-title">Sarah's Family Car</div>
-                    <div class="car-visual">🚗</div>
-                    <p><strong>Environment:</strong> City streets, highways, parking lots, home garage</p>
-                    <p><strong>Primary Users:</strong> Family members of varying experience levels</p>
-                    <p><strong>Usage Pattern:</strong> Daily commuting, errands, road trips</p>
-                    <p><strong>Asset Value:</strong> Transportation, family safety, personal property</p>
-                </div>
-                
-                <div class="car-section f1-car">
-                    <div class="car-title">Max's Formula 1 Car</div>
-                    <div class="car-visual">🏎️</div>
-                    <p><strong>Environment:</strong> Controlled race tracks, pit lanes, secured facilities</p>
-                    <p><strong>Primary Users:</strong> Professional driver, trained pit crew</p>
-                    <p><strong>Usage Pattern:</strong> High-speed racing, performance optimization</p>
-                    <p><strong>Asset Value:</strong> Racing performance, competitive advantage, team reputation</p>
-                </div>
-            </div>
-            
-            <div class="lesson-box">
-                <h3>🎯 Threat Modeling Principle #1</h3>
-                <p>The same type of asset (a car) requires completely different security controls based on its environment, users, and purpose. Context is everything in threat modeling!</p>
-            </div>
-            
-            <div class="interactive-element" onclick="showStory('threats')">
-                <h3>🔍 Click to Analyze the Threats Each Car Faces</h3>
-                <p>Let's dive deeper into what each car needs to protect against...</p>
-            </div>
-        </div>
-        
-        <div id="fundamentals" class="story-content">
-            <h2 style="text-align: center; color: #2c3e50; margin-bottom: 30px;">🔍 Threat Modeling Fundamentals</h2>
-            
-            <div class="lesson-box">
-                <h3>What is Threat Modeling?</h3>
-                <p>Threat modeling is a structured approach to identifying security risks and determining appropriate countermeasures. Think of it as creating a "security blueprint" for your system - just like our cars need different safety features for different environments.</p>
-            </div>
-            
-            <!-- Enhanced Threat Model Diagram -->
-            <div style="background: white; border-radius: 15px; padding: 30px; margin: 30px 0; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);">
-                <h3 style="text-align: center; color: #2c3e50; margin-bottom: 25px;">🗺️ Threat Model Flow</h3>
-                <svg viewBox="0 0 1000 700" style="width: 100%; height: auto; max-height: 500px;">
-                    <!-- System -->
-                    <rect x="50" y="150" width="120" height="80" rx="10" fill="#3498db" stroke="#2980b9" stroke-width="3"/>
-                    <text x="110" y="195" text-anchor="middle" fill="white" font-size="16" font-weight="bold">System</text>
-                    <text x="110" y="210" text-anchor="middle" fill="white" font-size="12">(Car)</text>
-                    
-                    <!-- Data Stores -->
-                    <rect x="50" y="50" width="120" height="60" rx="10" fill="#27ae60" stroke="#229954" stroke-width="3"/>
-                    <text x="110" y="85" text-anchor="middle" fill="white" font-size="16" font-weight="bold">Data</text>
-                    <text x="110" y="100" text-anchor="middle" fill="white" font-size="12">(Telemetry)</text>
-                    
-                    <!-- Functionality -->
-                    <rect x="50" y="280" width="120" height="80" rx="10" fill="#8e44ad" stroke="#7d3c98" stroke-width="3"/>
-                    <text x="110" y="320" text-anchor="middle" fill="white" font-size="14" font-weight="bold">Functionality</text>
-                    <text x="110" y="335" text-anchor="middle" fill="white" font-size="12">(Driving)</text>
-                    
-                    <!-- Value -->
-                    <rect x="270" y="100" width="120" height="80" rx="10" fill="#f39c12" stroke="#e67e22" stroke-width="3"/>
-                    <text x="330" y="145" text-anchor="middle" fill="white" font-size="16" font-weight="bold">Value</text>
-                    <text x="330" y="160" text-anchor="middle" fill="white" font-size="12">(What's Protected)</text>
-                    
-                    <!-- Risk -->
-                    <rect x="490" y="100" width="120" height="80" rx="10" fill="#e74c3c" stroke="#c0392b" stroke-width="3"/>
-                    <text x="550" y="145" text-anchor="middle" fill="white" font-size="16" font-weight="bold">Risk</text>
-                    <text x="550" y="160" text-anchor="middle" fill="white" font-size="12">(Impact)</text>
-                    
-                    <!-- Threat -->
-                    <rect x="490" y="280" width="120" height="80" rx="10" fill="#e67e22" stroke="#d35400" stroke-width="3"/>
-                    <text x="550" y="320" text-anchor="middle" fill="white" font-size="16" font-weight="bold">Threat</text>
-                    <text x="550" y="335" text-anchor="middle" fill="white" font-size="12">(Danger)</text>
-                    
-                    <!-- Vulnerability -->
-                    <rect x="700" y="280" width="120" height="80" rx="10" fill="#95a5a6" stroke="#7f8c8d" stroke-width="3"/>
-                    <text x="760" y="315" text-anchor="middle" fill="white" font-size="14" font-weight="bold">Vulnerability</text>
-                    <text x="760" y="330" text-anchor="middle" fill="white" font-size="12">(Weakness)</text>
-                    <text x="760" y="345" text-anchor="middle" fill="white" font-size="12">(Exploitable)</text>
-                    
-                    <!-- Weakness -->
-                    <rect x="490" y="450" width="120" height="80" rx="10" fill="#34495e" stroke="#2c3e50" stroke-width="3"/>
-                    <text x="550" y="490" text-anchor="middle" fill="white" font-size="16" font-weight="bold">Weakness</text>
-                    <text x="550" y="505" text-anchor="middle" fill="white" font-size="12">(Flaw)</text>
-                    
-                    <!-- Actor -->
-                    <ellipse cx="750" cy="150" rx="60" ry="40" fill="#16a085" stroke="#138d75" stroke-width="3"/>
-                    <text x="750" y="155" text-anchor="middle" fill="white" font-size="16" font-weight="bold">Actor</text>
-                    <text x="750" y="170" text-anchor="middle" fill="white" font-size="12">(Attacker)</text>
-                    
-                    <!-- Trust Boundary -->
-                    <rect x="30" y="30" width="600" height="520" rx="20" fill="none" stroke="#e74c3c" stroke-width="4" stroke-dasharray="10,5" opacity="0.7"/>
-                    <text x="330" y="25" text-anchor="middle" fill="#e74c3c" font-size="14" font-weight="bold">Trust Boundary</text>
-                    
-                    <!-- Data Flow Arrows -->
-                    <defs>
-                        <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
-                            <polygon points="0 0, 10 3.5, 0 7" fill="#2c3e50"/>
-                        </marker>
-                    </defs>
-                    
-                    <!-- System → Data -->
-                    <line x1="110" y1="150" x2="110" y2="120" stroke="#2c3e50" stroke-width="3" marker-end="url(#arrowhead)"/>
-                    <text x="90" y="135" fill="#2c3e50" font-size="12" font-weight="bold">Has</text>
-                    
-                    <!-- Data → Value -->
-                    <line x1="170" y1="80" x2="270" y2="130" stroke="#2c3e50" stroke-width="3" marker-end="url(#arrowhead)"/>
-                    <text x="200" y="100" fill="#2c3e50" font-size="12" font-weight="bold">Creates</text>
-                    
-                    <!-- Value → Risk -->
-                    <line x1="390" y1="140" x2="490" y2="140" stroke="#2c3e50" stroke-width="3" marker-end="url(#arrowhead)"/>
-                    <text x="420" y="135" fill="#2c3e50" font-size="12" font-weight="bold">Informs</text>
-                    
-                    <!-- System → Functionality -->
-                    <line x1="110" y1="230" x2="110" y2="280" stroke="#2c3e50" stroke-width="3" marker-end="url(#arrowhead)"/>
-                    <text x="75" y="255" fill="#2c3e50" font-size="12" font-weight="bold">Creates</text>
-                    
-                    <!-- System → Value -->
-                    <line x1="170" y1="175" x2="270" y2="155" stroke="#2c3e50" stroke-width="3" marker-end="url(#arrowhead)"/>
-                    <text x="200" y="165" fill="#2c3e50" font-size="12" font-weight="bold">Exposes</text>
-                    
-                    <!-- Functionality → Weakness -->
-                    <line x1="170" y1="340" x2="490" y2="470" stroke="#2c3e50" stroke-width="3" marker-end="url(#arrowhead)"/>
-                    <text x="300" y="400" fill="#2c3e50" font-size="12" font-weight="bold">Contains</text>
-                    
-                    <!-- Weakness → Vulnerability -->
-                    <line x1="610" y1="490" x2="700" y2="350" stroke="#2c3e50" stroke-width="3" marker-end="url(#arrowhead)"/>
-                    <text x="650" y="430" fill="#2c3e50" font-size="12" font-weight="bold">Results in</text>
-                    
-                    <!-- Threat → Vulnerability -->
-                    <line x1="610" y1="320" x2="700" y2="320" stroke="#2c3e50" stroke-width="3" marker-end="url(#arrowhead)"/>
-                    <text x="635" y="315" fill="#2c3e50" font-size="12" font-weight="bold">Exploits</text>
-                    
-                    <!-- Risk → Threat -->
-                    <line x1="550" y1="180" x2="550" y2="280" stroke="#2c3e50" stroke-width="3" marker-end="url(#arrowhead)"/>
-                    <text x="560" y="230" fill="#2c3e50" font-size="12" font-weight="bold">Generates</text>
-                    
-                    <!-- Actor → Threat -->
-                    <line x1="690" y1="160" x2="610" y2="300" stroke="#2c3e50" stroke-width="3" marker-end="url(#arrowhead)"/>
-                    <text x="630" y="220" fill="#2c3e50" font-size="12" font-weight="bold">Causes</text>
-                    
-                    <!-- Functionality breaks weakness arrow -->
-                    <line x1="170" y1="320" x2="490" y2="490" stroke="#e74c3c" stroke-width="3" marker-end="url(#arrowhead)" stroke-dasharray="5,5"/>
-                    <text x="300" y="420" fill="#e74c3c" font-size="12" font-weight="bold">Breaks</text>
-                </svg>
-            </div>
-            
-            <!-- Data Flow Concepts -->
-            <div class="car-comparison">
-                <div class="car-section normal-car">
-                    <div class="car-title">🔄 Data Flows in Sarah's Car</div>
-                    <div class="threats-list">
-                        <h3>📊 Key Data Flows:</h3>
-                        <div class="threat-item">
-                            <strong>GPS → Navigation System</strong>
-                            <br>Location data flows to provide directions
-                        </div>
-                        <div class="threat-item">
-                            <strong>Engine → Dashboard</strong>
-                            <br>Performance metrics displayed to driver
-                        </div>
-                        <div class="threat-item">
-                            <strong>Phone → Car Audio</strong>
-                            <br>Bluetooth connection for calls/music
-                        </div>
-                        <div class="threat-item">
-                            <strong>Key Fob → Door Locks</strong>
-                            <br>Authentication signal to unlock vehicle
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="car-section f1-car">
-                    <div class="car-title">🔄 Data Flows in Max's F1 Car</div>
-                    <div class="threats-list">
-                        <h3>📊 Key Data Flows:</h3>
-                        <div class="threat-item">
-                            <strong>Sensors → Telemetry System</strong>
-                            <br>Real-time performance data to pit crew
-                        </div>
-                        <div class="threat-item">
-                            <strong>Strategy → Driver Radio</strong>
-                            <br>Encrypted communications from pit wall
-                        </div>
-                        <div class="threat-item">
-                            <strong>Car Setup → ECU</strong>
-                            <br>Configuration data controlling car behavior
-                        </div>
-                        <div class="threat-item">
-                            <strong>Biometrics → Garage Access</strong>
-                            <br>Identity verification for restricted areas
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Trust Boundaries -->
-            <div style="background: linear-gradient(135deg, #ff6b6b, #feca57); color: white; padding: 25px; border-radius: 15px; margin: 30px 0;">
-                <h3 style="margin-bottom: 20px;">🔒 Trust Boundaries - The Security Perimeter</h3>
-                <div class="car-comparison" style="gap: 20px;">
-                    <div style="background: rgba(255,255,255,0.1); padding: 20px; border-radius: 10px;">
-                        <h4>Sarah's Trust Boundaries:</h4>
-                        <ul style="margin-left: 20px; line-height: 1.6;">
-                            <li><strong>Physical:</strong> Locked doors and windows</li>
-                            <li><strong>Digital:</strong> Encrypted key fob communication</li>
-                            <li><strong>Network:</strong> Bluetooth pairing authentication</li>
-                            <li><strong>User:</strong> Family members vs strangers</li>
-                        </ul>
-                    </div>
-                    <div style="background: rgba(255,255,255,0.1); padding: 20px; border-radius: 10px;">
-                        <h4>Max's Trust Boundaries:</h4>
-                        <ul style="margin-left: 20px; line-height: 1.6;">
-                            <li><strong>Physical:</strong> Secured garage with guards</li>
-                            <li><strong>Digital:</strong> Encrypted telemetry channels</li>
-                            <li><strong>Network:</strong> Private team communications</li>
-                            <li><strong>Personnel:</strong> Team members vs competitors</li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="interactive-element" onclick="showStory('threats')">
-                <h3>🎯 Ready to Analyze Threats?</h3>
-                <p>Now that you understand the fundamentals, let's see how they apply to our car examples...</p>
-            </div>
-        </div>
-        
-        <div id="threats" class="story-content">
-            <h2 style="text-align: center; color: #2c3e50; margin-bottom: 30px;">Threat Landscape Analysis</h2>
-            
-            <div class="car-comparison">
-                <div class="car-section normal-car">
-                    <div class="car-title">Sarah's Family Car Threats</div>
-                    <div class="car-visual">🚗⚠️</div>
-                    <div class="threats-list">
-                        <h3>🎯 Primary Threats:</h3>
-                        <div class="threat-item">
-                            <strong>Theft/Break-ins</strong> <span class="relevance-indicator high-relevance">HIGH</span>
-                            <br>Car left unattended in public spaces, valuable items visible
-                        </div>
-                        <div class="threat-item">
-                            <strong>Accidents</strong> <span class="relevance-indicator high-relevance">HIGH</span>
-                            <br>Other drivers, weather conditions, mechanical failures
-                        </div>
-                        <div class="threat-item">
-                            <strong>Unauthorized Use</strong> <span class="relevance-indicator medium-relevance">MEDIUM</span>
-                            <br>Family members, friends, valet parking situations
-                        </div>
-                        <div class="threat-item">
-                            <strong>Vandalism</strong> <span class="relevance-indicator medium-relevance">MEDIUM</span>
-                            <br>Property damage in uncontrolled environments
-                        </div>
-                        <div class="threat-item">
-                            <strong>Child Safety Risks</strong> <span class="relevance-indicator high-relevance">HIGH</span>
-                            <br>Children accidentally opening doors, unbuckling restraints
-                        </div>
-                        <div class="threat-item">
-                            <strong>Distracted Driving</strong> <span class="relevance-indicator high-relevance">HIGH</span>
-                            <br>Mobile phones, passengers, navigation systems
-                        </div>
-                        <div class="threat-item">
-                            <strong>Tire Failure</strong> <span class="relevance-indicator medium-relevance">MEDIUM</span>
-                            <br>Blowouts on highways due to poor maintenance
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="car-section f1-car">
-                    <div class="car-title">Max's F1 Car Threats</div>
-                    <div class="car-visual">🏎️⚠️</div>
-                    <div class="threats-list">
-                        <h3>🎯 Primary Threats:</h3>
-                        <div class="threat-item">
-                            <strong>Performance Sabotage</strong> <span class="relevance-indicator high-relevance">HIGH</span>
-                            <br>Competitors tampering with car setup or components
-                        </div>
-                        <div class="threat-item">
-                            <strong>Data Espionage</strong> <span class="relevance-indicator high-relevance">HIGH</span>
-                            <br>Telemetry data, setup secrets, technical innovations
-                        </div>
-                        <div class="threat-item">
-                            <strong>Catastrophic Failure</strong> <span class="relevance-indicator high-relevance">HIGH</span>
-                            <br>Life-threatening mechanical failures at 200+ mph
-                        </div>
-                        <div class="threat-item">
-                            <strong>Unauthorized Access</strong> <span class="relevance-indicator medium-relevance">MEDIUM</span>
-                            <br>Media, fans, or competitors accessing restricted areas
-                        </div>
-                        <div class="threat-item">
-                            <strong>Fire Hazards</strong> <span class="relevance-indicator high-relevance">HIGH</span>
-                            <br>High-octane fuel, hot exhausts, electrical systems at extreme stress
-                        </div>
-                        <div class="threat-item">
-                            <strong>Equipment Tampering</strong> <span class="relevance-indicator high-relevance">HIGH</span>
-                            <br>Competitors loosening wheel nuts, contaminating fuel
-                        </div>
-                        <div class="threat-item">
-                            <strong>Communication Interception</strong> <span class="relevance-indicator medium-relevance">MEDIUM</span>
-                            <br>Radio communications with strategy information
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="lesson-box">
-                <h3>📊 Threat Modeling Principle #2</h3>
-                <p>Different assets face completely different threat landscapes. A family car worries about theft and everyday accidents, while an F1 car focuses on competitive intelligence and performance integrity.</p>
-            </div>
-        </div>
-        
-        <div id="controls" class="story-content">
-            <h2 style="text-align: center; color: #2c3e50; margin-bottom: 30px;">Security Controls Comparison</h2>
-            
-            <div class="car-comparison">
-                <div class="car-section normal-car">
-                    <div class="car-title">Sarah's Family Car Controls</div>
-                    <div class="car-visual">🚗🔒</div>
-                    <div class="controls-list">
-                        <h3>🛡️ Key Security Controls:</h3>
-                        <div class="control-item">
-                            <strong>Door Locks & Alarm System</strong> <span class="relevance-indicator high-relevance">CRITICAL</span>
-                            <br>Essential for preventing theft and unauthorized access
-                        </div>
-                        <div class="control-item">
-                            <strong>Airbags & Seat Belts</strong> <span class="relevance-indicator high-relevance">CRITICAL</span>
-                            <br>Protect occupants during accidents
-                        </div>
-                        <div class="control-item">
-                            <strong>Anti-lock Brakes (ABS)</strong> <span class="relevance-indicator high-relevance">CRITICAL</span>
-                            <br>Prevent skidding in emergency situations
-                        </div>
-                        <div class="control-item">
-                            <strong>Backup Camera & Sensors</strong> <span class="relevance-indicator medium-relevance">IMPORTANT</span>
-                            <br>Help prevent low-speed collisions
-                        </div>
-                        <div class="control-item">
-                            <strong>Child Safety Locks</strong> <span class="relevance-indicator high-relevance">CRITICAL</span>
-                            <br>Prevent children from opening doors while driving
-                        </div>
-                        <div class="control-item">
-                            <strong>Tire Pressure Monitoring</strong> <span class="relevance-indicator medium-relevance">IMPORTANT</span>
-                            <br>Prevents dangerous blowouts at highway speeds
-                        </div>
-                        <div class="control-item">
-                            <strong>Roll Cage</strong> <span class="relevance-indicator low-relevance">UNNECESSARY</span>
-                            <br>Would block visibility and accessibility for daily use
-                        </div>
-                        <div class="control-item">
-                            <strong>Racing Harness</strong> <span class="relevance-indicator low-relevance">IMPRACTICAL</span>
-                            <br>Too complex for multiple daily entries/exits
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="car-section f1-car">
-                    <div class="car-title">Max's F1 Car Controls</div>
-                    <div class="car-visual">🏎️🔒</div>
-                    <div class="controls-list">
-                        <h3>🛡️ Key Security Controls:</h3>
-                        <div class="control-item">
-                            <strong>Real-time Telemetry Encryption</strong> <span class="relevance-indicator high-relevance">CRITICAL</span>
-                            <br>Protect performance data from competitors
-                        </div>
-                        <div class="control-item">
-                            <strong>Physical Access Controls</strong> <span class="relevance-indicator high-relevance">CRITICAL</span>
-                            <br>Restricted garage access, security personnel
-                        </div>
-                        <div class="control-item">
-                            <strong>Component Authentication</strong> <span class="relevance-indicator high-relevance">CRITICAL</span>
-                            <br>Ensure all parts are genuine and unmodified
-                        </div>
-                        <div class="control-item">
-                            <strong>Advanced Safety Systems</strong> <span class="relevance-indicator high-relevance">CRITICAL</span>
-                            <br>HALO device, fire suppression, emergency communications
-                        </div>
-                        <div class="control-item">
-                            <strong>Driver Helmet & HANS Device</strong> <span class="relevance-indicator high-relevance">CRITICAL</span>
-                            <br>Essential protection at 200+ mph; would impair normal driving
-                        </div>
-                        <div class="control-item">
-                            <strong>Roll Cage & Racing Harness</strong> <span class="relevance-indicator high-relevance">CRITICAL</span>
-                            <br>Structural protection for high-speed impacts
-                        </div>
-                        <div class="control-item">
-                            <strong>Fire Suppression System</strong> <span class="relevance-indicator high-relevance">CRITICAL</span>
-                            <br>Automatic fire extinguisher due to fuel and heat risks
-                        </div>
-                        <div class="control-item">
-                            <strong>Traditional Car Alarms</strong> <span class="relevance-indicator low-relevance">IRRELEVANT</span>
-                            <br>Unnecessary in controlled race environment
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="lesson-box">
-                <h3>⚖️ Threat Modeling Principle #3</h3>
-                <p>Security controls must be tailored to the specific threats. What's critical for one environment may be irrelevant or even counterproductive in another. F1 cars need encryption and access controls, while family cars need theft deterrence and collision protection.</p>
-            </div>
-        </div>
-        
-        <div id="lessons" class="story-content">
-            <h2 style="text-align: center; color: #2c3e50; margin-bottom: 30px;">Key Threat Modeling Lessons</h2>
-            
-            <div class="scenario-grid">
-                <div class="scenario-card">
-                    <h3>🎯 Context Matters</h3>
-                    <p>The same asset (car) requires different security controls based on its environment, users, and purpose. Always start by understanding your specific context.</p>
-                </div>
-                
-                <div class="scenario-card">
-                    <h3>📊 Threat Prioritization</h3>
-                    <p>Not all threats are equal. Sarah worries about theft; Max worries about espionage. Focus your security efforts on the threats most relevant to your situation.</p>
-                </div>
-                
-                <div class="scenario-card">
-                    <h3>🛡️ Control Effectiveness</h3>
-                    <p>A car alarm is vital for Sarah but useless for Max. Security controls must match the actual threats you face, not generic "best practices."</p>
-                </div>
-                
-                <div class="scenario-card">
-                    <h3>⚡ Performance vs Security</h3>
-                    <p>F1 cars prioritize performance over convenience (no power steering, minimal comfort). Sometimes security requirements force trade-offs with other goals.</p>
-                </div>
-                
-                <div class="scenario-card">
-                    <h3>🪖 Safety Equipment</h3>
-                    <p>Helmets are mandatory for F1 drivers but would impair vision and comfort for family drivers. Racing harnesses provide superior crash protection but are too complex for daily use.</p>
-                </div>
-                
-                <div class="scenario-card">
-                    <h3>🔐 Access Controls</h3>
-                    <p>F1 cars need biometric garage access and component authentication. Family cars need simple key fobs and basic alarms that family members can easily use.</p>
-                </div>
-                
-                <div class="scenario-card">
-                    <h3>🔥 Emergency Systems</h3>
-                    <p>F1 cars have automatic fire suppression and quick-release steering wheels. Family cars rely on airbags and crumple zones - fire systems would add cost and complexity without benefit.</p>
-                </div>
-                
-                <div class="scenario-card">
-                    <h3>👶 Child Safety</h3>
-                    <p>Family cars need child locks, car seat anchors, and rear door safety features. F1 cars are single-occupant vehicles where such features would be pointless weight.</p>
-                </div>
-            </div>
-            
-            <div class="lesson-box">
-                <h3>🎓 The Threat Modeling Process</h3>
-                <p><strong>1.</strong> Identify your assets and their value<br>
-                <strong>2.</strong> Understand your operating environment<br>
-                <strong>3.</strong> Catalog relevant threats for YOUR context<br>
-                <strong>4.</strong> Prioritize threats by likelihood and impact<br>
-                <strong>5.</strong> Select controls that address your priority threats<br>
-                <strong>6.</strong> Regularly reassess as context changes</p>
-            </div>
-            
-            <div class="interactive-element">
-                <h3>🚀 Ready to Apply This to Your Organization?</h3>
-                <p>Think about your own systems: What are your "family car" assets that need basic, user-friendly protection? What are your "F1 car" assets that require specialized, high-performance security controls?</p>
-                <br>
-                <p><em>Remember: The goal isn't to have the most security controls—it's to have the RIGHT security controls for YOUR specific threats.</em></p>
-            </div>
-        </div>
-    </div>
+        if controls:
+            threat["controls"] = controls
+        threats.append(threat)
+        threat_counter += 1
+
+    add_threat(
+        "Spoofing",
+        "Fake login pages to steal credentials.",
+        "Spoofing",
+        "Implement multi-factor authentication and secure session management.",
+        "V2.1.1 - Verify strong authentication; V2.7.1 - Verify session management.",
+        "Threat Assessment Level 1 - Identify authentication risks; Governance Level 2 - Define policies.",
+        "Frontend → Backend",
+        controls="Use MFA (e.g., TOTP) and HTTP-only, Secure cookies."
+    )
+    add_threat(
+        "Tampering",
+        "Modification of product prices in requests.",
+        "Tampering",
+        "Validate inputs server-side and use signed tokens for integrity.",
+        "V5.1.3 - Verify input validation; V5.3.4 - Verify secure queries.",
+        "Secure Architecture Level 1 - Define security requirements; Design Level 2 - Integrity controls.",
+        "Frontend → Backend",
+        controls="Use HMAC-SHA256 for data integrity and whitelist input validation."
+    )
+    add_threat(
+        "Repudiation",
+        "Users deny placing orders due to missing logs.",
+        "Repudiation",
+        "Log all user actions with timestamps and IDs.",
+        "V7.1.1 - Verify logging controls; V7.2.1 - Verify log integrity.",
+        "Security Operations Level 2 - Enable audit logging; Incident Management Level 2 - Monitor logs.",
+        "Backend → Database",
+        controls="Use AWS CloudTrail for logging and ensure log integrity."
+    )
+    add_threat(
+        "Information Disclosure",
+        "Exposure of customer payment data.",
+        "Information Disclosure",
+        "Use HTTPS and encrypt sensitive database fields.",
+        "V9.1.1 - Verify secure communication; V4.1.3 - Verify access controls.",
+        "Implementation Level 2 - Secure data handling; Operations Level 2 - Protect data.",
+        "Backend → Database",
+        controls="Enable TLS 1.3 and use AES-256 for database encryption."
+    )
+    add_threat(
+        "Information Disclosure",
+        "Payment details exposed in transit to third-party service.",
+        "Information Disclosure",
+        "Use HTTPS and secure API tokens for third-party communication.",
+        "V9.1.1 - Verify secure communication; V13.2.1 - Verify API security.",
+        "Implementation Level 2 - Secure data handling; Operations Level 2 - Protect data.",
+        "Backend → Payment Gateway",
+        controls="Use TLS 1.3 and OAuth 2.0 for Stripe API."
+    )
+    add_threat(
+        "Denial of Service",
+        "Cart bombing to overwhelm the system.",
+        "Denial of Service",
+        "Implement rate limiting and use a CDN for traffic spikes.",
+        "V1.10.1 - Verify anti-DoS controls; V13.1.1 - Verify API resilience.",
+        "Incident Management Level 2 - Monitor for DoS; Operations Level 2 - Ensure availability.",
+        "Frontend → Backend",
+        controls="Configure rate limiting (100 requests/min) and use AWS CloudFront."
+    )
+    add_threat(
+        "Elevation of Privilege",
+        "Weak role-based access controls allow privilege escalation.",
+        "Elevation of Privilege",
+        "Enforce strict RBAC and validate roles server-side.",
+        "V4.2.1 - Verify RBAC; V4.2.2 - Verify segregation of duties.",
+        "Secure Architecture Level 2 - Implement RBAC; Governance Level 2 - Audit permissions.",
+        "Backend",
+        controls="Use AWS IAM roles with least privilege."
+    )
+
+    for flow in st.session_state.data_flows:
+        data_type = flow.get('dataType', '').lower()
+        source = flow.get('source', '').lower()
+        destination = flow.get('destination', '').lower()
+        edge_key = f"{flow['source']} → {flow['destination']}"
+        if 'user' in source or 'client' in source:
+            add_threat(
+                "Spoofing",
+                f"Unauthorized access in flow from {source} to {destination}.",
+                "Spoofing",
+                "Validate source identity with OAuth 2.0 or JWT.",
+                "V2.1.2 - Verify identity validation; V2.7.3 - Verify session binding.",
+                "Threat Assessment Level 1 - Identify risks; Governance Level 2 - Enforce policies.",
+                edge_key,
+                controls="Use OAuth 2.0 with PKCE and RS256 JWT signing."
+            )
+        add_threat(
+            "Tampering",
+            f"Data integrity risk in flow from {source} to {destination}.",
+            "Tampering",
+            "Use digital signatures and validate inputs at destination.",
+            "V5.1.4 - Verify data integrity; V5.2.2 - Verify input sanitization.",
+            "Design Level 2 - Integrity controls; Verification Level 1 - Validate inputs.",
+            edge_key,
+            controls="Apply HMAC-SHA256 and schema-based validation."
+        )
+        if 'pii' in data_type or 'sensitive' in data_type:
+            add_threat(
+                "Information Disclosure",
+                f"Sensitive data ({data_type}) exposed in flow from {source} to {destination}.",
+                "Information Disclosure",
+                "Encrypt data with TLS 1.3 and mask sensitive data in logs.",
+                "V9.1.2 - Verify encryption; V4.1.4 - Verify access restrictions.",
+                "Implementation Level 2 - Secure data; Operations Level 2 - Protect data.",
+                edge_key,
+                controls="Use TLS 1.3 and data masking for logs."
+            )
+
+    for boundary in st.session_state.trust_boundaries:
+        name = boundary.get('name', '').lower()
+        description = boundary.get('description', '').lower()
+        if 'boundary' in name or 'frontend' in name:
+            add_threat(
+                "Spoofing",
+                f"Cross-boundary spoofing in {name}.",
+                "Spoofing",
+                "Enforce mutual TLS and validate cross-boundary requests.",
+                "V2.1.3 - Verify boundary authentication; V13.2.1 - Verify API security.",
+                "Threat Assessment Level 2 - Model boundary risks; Governance Level 2 - Define policies.",
+                boundary["name"],
+                controls="Use mutual TLS with client certificates."
+            )
+        if 'database' in name or 'backend' in name:
+            add_threat(
+                "Tampering",
+                f"Data tampering within {name} due to weak controls.",
+                "Tampering",
+                "Use integrity checks and secure coding practices.",
+                "V5.1.3 - Verify input validation; V5.3.5 - Verify secure coding.",
+                "Design Level 2 - Integrity controls; Verification Level 2 - Validate controls.",
+                boundary["name"],
+                controls="Apply SHA-256 checksums and OWASP guidelines."
+            )
+
+    return {"threats": threats}
+
+def step_1():
+    st.header("Step 1: Provide System Details")
+    st.markdown(f"""
+    **Default Example**: E-commerce web app with a React frontend, Node.js backend, MySQL database, and Stripe payment gateway.
+    Feel free to use this example or describe your own system below. Generated on: {current_datetime}.
+    """)
+    st.session_state.text_input = st.text_area(
+        "Describe your system architecture (e.g., components, technologies, public-facing, third-party services)",
+        st.session_state.text_input,
+        height=200
+    )
+    uploaded_file = st.file_uploader("Upload a Data Flow Diagram (e.g., PNG, JPG)", type=["png", "jpg", "jpeg"])
+    if uploaded_file:
+        st.session_state.uploaded_image = base64.b64encode(uploaded_file.read()).decode("utf-8")
+        st.image(uploaded_file, caption="Uploaded Data Flow Diagram")
+    if st.button("Next"):
+        if st.session_state.text_input or st.session_state.uploaded_image or st.session_state.diagram:
+            st.session_state.step = 2
+            st.rerun()
+        else:
+            st.session_state.error = "Please provide a system description or diagram."
+
+def step_2():
+    st.header("Step 2: Define Data Flows and Trust Boundaries")
+    st.markdown(f"""
+    **Default E-commerce Data Flows**:
+    - Frontend → Backend (User Input: PII, Credentials)
+    - Backend → Database (User Data, Orders)
+    - Backend → Payment Gateway (Payment Details)
+
+    **Default Trust Boundaries**:
+    - Frontend Boundary: Untrusted client-side React app
+    - Backend Boundary: Trusted server-side Node.js API and MySQL database
+    - Payment Gateway Boundary: External third-party Stripe service
+
+    Modify or add new data flows and trust boundaries below. Generated on: {current_datetime}.
+    """)
     
-    <script>
-        function showStory(section) {
-            // Hide all content sections
-            const contents = document.querySelectorAll('.story-content');
-            contents.forEach(content => {
-                content.classList.remove('active');
-            });
-            
-            // Remove active class from all buttons
-            const buttons = document.querySelectorAll('.nav-btn');
-            buttons.forEach(button => {
-                button.classList.remove('active');
-            });
-            
-            // Show selected section
-            document.getElementById(section).classList.add('active');
-            
-            // Add active class to clicked button
-            event.target.classList.add('active');
-        }
+    st.subheader("Data Flows")
+    with st.container():
+        source = st.text_input("Data Flow Source (e.g., User, API)", key="data_flow_source")
+        destination = st.text_input("Data Flow Destination (e.g., Database, Service)", key="data_flow_destination")
+        data_type = st.text_input("Data Type (e.g., PII, Public, Confidential)", key="data_flow_type")
+        if st.button("Add Data Flow"):
+            if source and destination and data_type:
+                st.session_state.data_flows.append({"source": source, "destination": destination, "dataType": data_type})
+                st.success("Data Flow added!")
+                st.rerun()
+            else:
+                st.session_state.error = "Please fill in all data flow fields."
+    
+    if st.session_state.data_flows:
+        st.write("**Current Data Flows:**")
+        for flow in st.session_state.data_flows:
+            st.write(f"{flow['source']} → {flow['destination']} ({flow['dataType']})")
+
+    st.subheader("Trust Boundaries")
+    with st.container():
+        trust_boundary_options = [
+            "Web Server Boundary",
+            "Database Boundary",
+            "API Boundary",
+            "Frontend Boundary",
+            "Payment Gateway Boundary",
+            "Custom"
+        ]
+        selected_boundary = st.selectbox("Select Trust Boundary", trust_boundary_options, key="trust_boundary_select")
+        name = selected_boundary
+        if selected_boundary == "Custom":
+            name = st.text_input("Custom Trust Boundary Name", key="custom_boundary_name")
+        description = st.text_input("Trust Boundary Description", key="boundary_description")
+        if st.button("Add Trust Boundary"):
+            if name and description and name != "Custom":
+                st.session_state.trust_boundaries.append({"name": name, "description": description})
+                st.success("Trust Boundary added!")
+                st.rerun()
+            else:
+                st.session_state.error = "Please provide a valid trust boundary name and description."
+    
+    if st.session_state.trust_boundaries:
+        st.write("**Current Trust Boundaries:**")
+        for boundary in st.session_state.trust_boundaries:
+            st.write(f"{boundary['name']}: {boundary['description']}")
+
+    if st.session_state.data_flows or st.session_state.trust_boundaries:
+        st.subheader("Preview Data Flow Diagram")
+        preview_threats = analyze_threats().get("threats", [])
+        if st.session_state.uploaded_image:
+            st.session_state.generated_diagram = annotate_image(st.session_state.uploaded_image, preview_threats)
+            st.image(f"data:image/png;base64,{st.session_state.generated_diagram}", caption="Data Flow Diagram", width=800)
+        else:
+            diagram = generate_diagram(preview_threats)
+            if diagram:
+                st.image(f"data:image/png;base64,{diagram}", caption="Data Flow Diagram", width=800)
+            else:
+                st.markdown("**Data Flow Diagram (ASCII Fallback)**:")
+                st.code(fallback_ascii_diagram(preview_threats), language="text")
+                if st.session_state.error:
+                    st.error(st.session_state.error)
+
+    if st.button("Analyze Threats"):
+        if st.session_state.data_flows or st.session_state.trust_boundaries:
+            with st.spinner("Analyzing threats..."):
+                st.session_state.threat_model = analyze_threats()
+                st.session_state.step = 3
+                st.rerun()
+        else:
+            st.session_state.error = "Please add at least one data flow or trust boundary."
+
+def step_3():
+    st.header("Data Flow Diagram")
+    if st.session_state.generated_diagram:
+        st.image(f"data:image/png;base64,{st.session_state.generated_diagram}", caption="Data Flow Diagram", width=800)
+    else:
+        st.markdown("**Data Flow Diagram (ASCII Fallback)**:")
+        st.code(fallback_ascii_diagram(st.session_state.threat_model.get("threats", [])), language="text")
+
+    st.header("Step 3: Threat Model Results")
+    st.markdown("Below are the identified threats, labeled with numeric IDs (e.g., T1, T2) and mapped to Data Flow Diagram (DFD) elements. Refer to the DFD above for threat locations.")
+    if st.session_state.threat_model:
+        st.subheader("Identified Threats")
+        dfd_elements = {}
+        for threat in st.session_state.threat_model["threats"]:
+            dfd_element = threat["dfd_element"]
+            dfd_elements.setdefault(dfd_element, []).append(threat)
         
-        // Add some interactive behavior
-        document.addEventListener('DOMContentLoaded', function() {
-            const interactiveElements = document.querySelectorAll('.interactive-element');
-            interactiveElements.forEach(element => {
-                element.addEventListener('click', function() {
-                    this.style.background = '#e8f5e8';
-                    setTimeout(() => {
-                        this.style.background = 'white';
-                    }, 200);
-                });
-            });
-        });
-    </script>
-</body>
-</html>
+        for dfd_element, threats in dfd_elements.items():
+            st.markdown(f"### Threats for {dfd_element}")
+            for threat in threats:
+                with st.expander(f"{threat['id']}: {threat['type']} (STRIDE: {threat['stride']})"):
+                    st.markdown(f"- **Description**: {threat['description']}")
+                    st.markdown(f"- **Mitigation**: {threat['mitigation']}")
+                    if "controls" in threat:
+                        st.markdown(f"- **Security Controls**: {threat['controls']}")
+                    st.markdown(f"- **OWASP ASVS**: {threat['asvs']}")
+                    st.markdown(f"- **OWASP SAMM**: {threat['samm']}")
+                    st.markdown(f"- **DFD Element**: {threat['dfd_element']}")
+
+    if st.button("Start Over"):
+        st.session_state.step = 1
+        st.session_state.text_input = (
+            "E-commerce web app with a React frontend, Node.js backend API, MySQL database, and Stripe payment gateway. "
+            "The app is public-facing, handles user authentication, and processes sensitive data like PII and payment details."
+        )
+        st.session_state.uploaded_image = None
+        st.session_state.diagram = None
+        st.session_state.data_flows = [
+            {"source": "Frontend", "destination": "Backend", "dataType": "User Input (PII, Credentials)"},
+            {"source": "Backend", "destination": "Database", "dataType": "User Data, Orders"},
+            {"source": "Backend", "destination": "Payment Gateway", "dataType": "Payment Details"}
+        ]
+        st.session_state.trust_boundaries = [
+            {"name": "Frontend Boundary", "description": "Untrusted client-side React app running on user devices"},
+            {"name": "Backend Boundary", "description": "Trusted server-side Node.js API and MySQL database"},
+            {"name": "Payment Gateway Boundary", "description": "External third-party Stripe service"}
+        ]
+        st.session_state.threat_model = None
+        st.session_state.error = ""
+        st.session_state.generated_diagram = None
+        st.rerun()
+    if st.session_state.error:
+        st.error(st.session_state.error)
+
+# Section: Tips for Threat Modeling
+st.header("Tips for Effective Threat Modeling")
+st.markdown("""
+1. **Map Data Flows**: Diagram data movement to identify vulnerabilities.
+2. **Define Trust Boundaries**: Mark trust level changes (e.g., client to server).
+3. **Apply STRIDE**: Analyze components and flows systematically.
+4. **Use Numbered Threat IDs**: Map threats to DFD elements with IDs (e.g., T1, T2).
+5. **Involve the Team**: Include developers, designers, and stakeholders.
+6. **Iterate**: Update the threat model as the system evolves.
+7. **Document**: Record threats, mitigations, and DFD mappings.
+""")
+
+# Render the current step
+if st.session_state.step == 1:
+    step_1()
+elif st.session_state.step == 2:
+    step_2()
+elif st.session_state.step == 3:
+    step_3()
+
+# Footer
+st.markdown("""
+---
+*Built with Streamlit | Learn more at [OWASP](https://owasp.org/www-community/Threat_Modeling) or [Microsoft STRIDE](https://docs.microsoft.com/en-us/azure/security/develop/threat-modeling-tool-threats).*
+""")
