@@ -2,9 +2,13 @@ import streamlit as st
 import base64
 import re
 from graphviz import Digraph, ExecutableNotFound
+from datetime import datetime
 
 # Streamlit app configuration
 st.set_page_config(page_title="Threat Modeling 101", page_icon="🔒", layout="wide")
+
+# Current date and time (05:22 PM AEST, Saturday, July 19, 2025)
+current_datetime = "05:22 PM AEST, Saturday, July 19, 2025"
 
 # Initialize session state
 if 'step' not in st.session_state:
@@ -37,8 +41,8 @@ if 'generated_diagram' not in st.session_state:
 
 # Title and introduction
 st.title("Threat Modeling 101: E-commerce Example with Enhanced DFD")
-st.markdown("""
-Welcome to *Threat Modeling 101*! This app teaches you how to identify and mitigate security threats using the **STRIDE** framework, focusing on **Data Flow** and **Trust Boundaries**. Threats are assigned numeric IDs (e.g., T1, T2) and mapped to a refined Data Flow Diagram (DFD) with improved visuals.
+st.markdown(f"""
+Welcome to *Threat Modeling 101*! This app teaches you how to identify and mitigate security threats using the **STRIDE** framework, focusing on **Data Flow** and **Trust Boundaries**. Threats are assigned numeric IDs (e.g., T1, T2) and mapped to a Data Flow Diagram (DFD) with improved visuals. Generated on: {current_datetime}.
 """)
 
 # Section: Key Concepts
@@ -67,12 +71,13 @@ Each threat is assigned a unique ID (e.g., T1, T2) and mapped to DFD elements (c
 """)
 
 def generate_diagram(threats):
-    """Generate a refined DFD with numbered threat IDs using Graphviz."""
+    """Generate a refined DFD with numbered threat IDs and date/time using Graphviz."""
     try:
         dot = Digraph(comment="Data Flow Diagram", format="png")
         dot.attr(rankdir="TB", size="10,8", fontname="Arial", bgcolor="white", splines="polyline")
         dot.attr("node", fontname="Arial", fontsize="12")
         dot.attr("edge", fontname="Arial", fontsize="10")
+        dot.attr(label=f"Data Flow Diagram\nGenerated on: {current_datetime}", labelloc="t", fontname="Arial", fontsize="14")
 
         # Define node styles based on component type
         node_styles = {
@@ -136,7 +141,7 @@ def generate_diagram(threats):
         return None
 
 def fallback_ascii_diagram(threats):
-    """Generate a refined ASCII diagram with numbered threat IDs and a legend table."""
+    """Generate a refined ASCII diagram with numbered threat IDs, date/time, and legend table."""
     # Map threats to DFD elements
     edge_threats = {}
     node_threats = {}
@@ -150,8 +155,9 @@ def fallback_ascii_diagram(threats):
         else:
             node_threats.setdefault(dfd_element, []).append(f"{threat_id}: {threat['type']}")
 
-    # Compact ASCII diagram
-    diagram = """
+    # Compact ASCII diagram with date/time
+    diagram = f"""
+    Data Flow Diagram (Generated on: {current_datetime})
     +----------------+         +----------------+         +----------------+
     |    Frontend    |<------->|    Backend     |<------->|    Database    |
     |   (React App)  |         |   (Node.js)    |         |    (MySQL)     |
@@ -359,9 +365,9 @@ def analyze_threats():
 
 def step_1():
     st.header("Step 1: Provide System Details")
-    st.markdown("""
+    st.markdown(f"""
     **Default Example**: E-commerce web app with a React frontend, Node.js backend, MySQL database, and Stripe payment gateway.
-    Feel free to use this example or describe your own system below.
+    Feel free to use this example or describe your own system below. Generated on: {current_datetime}.
     """)
     st.session_state.text_input = st.text_area(
         "Describe your system architecture (e.g., components, technologies, public-facing, third-party services)",
@@ -381,7 +387,7 @@ def step_1():
 
 def step_2():
     st.header("Step 2: Define Data Flows and Trust Boundaries")
-    st.markdown("""
+    st.markdown(f"""
     **Default E-commerce Data Flows**:
     - Frontend → Backend (User Input: PII, Credentials)
     - Backend → Database (User Data, Orders)
@@ -392,7 +398,7 @@ def step_2():
     - Backend Boundary: Trusted server-side Node.js API and MySQL database
     - Payment Gateway Boundary: External third-party Stripe service
 
-    Modify or add new data flows and trust boundaries below.
+    Modify or add new data flows and trust boundaries below. Generated on: {current_datetime}.
     """)
     
     st.subheader("Data Flows")
@@ -446,9 +452,9 @@ def step_2():
         preview_threats = analyze_threats().get("threats", [])
         diagram = generate_diagram(preview_threats)
         if diagram:
-            st.image(f"data:image/png;base64,{diagram}", caption="Refined Data Flow Diagram with Numbered Threat IDs", width=800)
+            st.image(f"data:image/png;base64,{diagram}", caption="Data Flow Diagram", width=800)
         else:
-            st.markdown("**Refined ASCII Diagram with Numbered Threat IDs**:")
+            st.markdown("**Data Flow Diagram (ASCII Fallback)**:")
             st.code(fallback_ascii_diagram(preview_threats), language="text")
             if st.session_state.error:
                 st.error(st.session_state.error)
@@ -463,8 +469,15 @@ def step_2():
             st.session_state.error = "Please add at least one data flow or trust boundary."
 
 def step_3():
+    st.header("Data Flow Diagram")
+    if st.session_state.generated_diagram:
+        st.image(f"data:image/png;base64,{st.session_state.generated_diagram}", caption="Data Flow Diagram", width=800)
+    else:
+        st.markdown("**Data Flow Diagram (ASCII Fallback)**:")
+        st.code(fallback_ascii_diagram(st.session_state.threat_model.get("threats", [])), language="text")
+
     st.header("Step 3: Threat Model Results")
-    st.markdown("Below are the identified threats, labeled with numeric IDs (e.g., T1, T2) and mapped to Data Flow Diagram (DFD) elements. Refer to the DFD for threat locations.")
+    st.markdown("Below are the identified threats, labeled with numeric IDs (e.g., T1, T2) and mapped to Data Flow Diagram (DFD) elements. Refer to the DFD above for threat locations.")
     if st.session_state.threat_model:
         st.subheader("Identified Threats")
         dfd_elements = {}
@@ -484,12 +497,6 @@ def step_3():
                     st.markdown(f"- **OWASP SAMM**: {threat['samm']}")
                     st.markdown(f"- **DFD Element**: {threat['dfd_element']}")
 
-    if st.session_state.generated_diagram:
-        st.subheader("Refined Data Flow Diagram with Numbered Threat IDs")
-        st.image(f"data:image/png;base64,{st.session_state.generated_diagram}", caption="Refined Data Flow Diagram with Numbered Threat IDs", width=800)
-    else:
-        st.markdown("**Refined ASCII Diagram with Numbered Threat IDs**:")
-        st.code(fallback_ascii_diagram(st.session_state.threat_model.get("threats", [])), language="text")
     if st.button("Start Over"):
         st.session_state.step = 1
         st.session_state.text_input = (
